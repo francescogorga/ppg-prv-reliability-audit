@@ -3,14 +3,17 @@
 **Does a PPG signal-quality gate reduce HRV error?** A reproducible audit of the signal-processing
 pipeline of a smart-glasses prototype app, on two public PPG + ECG datasets.
 
-Short answer: **no**. At its deployed threshold, the app's signal-quality index (SQI):
-- **finger, lab**: never fired;
-- **forehead, daily life**: discarded 42% of the data without meaningfully reducing the error.
+Short answer: **not as deployed, and not before the beats are timed correctly.**
+- **As deployed**, the app's signal-quality index (SQI) never fired on finger data. At the forehead,
+  in daily life, it discarded 42% of the data without meaningfully reducing the error.
+- **Even a perfect gate** cannot rescue the app's beat detector: with it, only 1% of windows are good.
+- **Timing beats on the systolic peak** cut the finger RMSSD error from 85.5 to 18.1 ms. After that, a
+  gate calibrated on other subjects halves it again: 8.5 ms with the SQI, 6.0 ms with an accelerometer.
+- **At the forehead, in daily life,** nothing worked.
 
-In both cases the RMSSD error comes from beat detection, which the SQI does not measure.
 The two-page write-up is in [`brief/brief.pdf`](brief/brief.pdf).
 
-![RMSSD error and data kept vs SQI threshold](brief/fig_sqi_tradeoff.png)
+![Oracle vs gates, app pipeline and v2](brief/fig_gates.png)
 
 ## Key results
 
@@ -30,7 +33,7 @@ Every number in the brief comes from a script in `analysis/` whose output is sav
 
 ## Follow-up: was the gate wrong, or can no gate help?
 
-Two further tests, not yet in the brief. Details in `analysis/README.md` §9.
+Two further tests, now also in the brief. Details in `analysis/README.md` §9.
 
 **Test 1: the ceiling.** An oracle keeps the windows with the lowest *true* error. It needs the
 ECG, so it is unreachable, but it shows the best any gate could do.
@@ -49,7 +52,7 @@ ECG, so it is unreachable, but it shows the best any gate could do.
 **Conclusion.** Fix beat timing first. A gate calibrated against a reference then roughly halves the
 error for half the data, and in the lab a plain accelerometer gate does at least as well.
 
-![Oracle vs gates](analysis/results/fig_oracle.png)
+The earlier threshold sweep is in `analysis/results/fig_sqi_tradeoff.png`.
 
 ## What is in this repository
 

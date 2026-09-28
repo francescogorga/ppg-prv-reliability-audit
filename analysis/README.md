@@ -242,9 +242,9 @@ fare. Errore mediano tenendo il 50% delle finestre:
 | | Oracolo | SQI app | Solo periodicità | Accelerometro | Senza filtro | Finestre buone (≤ 5 ms) |
 |---|---|---|---|---|---|---|
 | Dito, v1 (app) | 48,4 | 50,6 | 50,6 | 62,2 | 85,5 | 1,2% |
-| Dito, picco sistolico | 5,5 | 8,7 | 8,7 | 6,0 | 18,1 | 23,6% |
+| Dito, v2 (picco sistolico) | 5,5 | 8,3 | 8,3 | 6,0 | 18,1 | 23,6% |
 | Fronte, v1 (app) | 120,7 | 133,2 | 132,0 | 138,1 | 136,1 | 0% |
-| Fronte, picco sistolico | 96,5 | 108,8 | 104,0 | 109,9 | 113,7 | 0,1% |
+| Fronte, v2 (picco sistolico) | 96,5 | 109,0 | 109,6 | 109,9 | 113,7 | 0,1% |
 
 - Sul dito l'SQI, **usato come classifica**, è quasi al livello dell'oracolo: il difetto era la soglia 0,4.
 - Con la v1 nemmeno un filtro perfetto scende sotto ~48 ms tenendo metà dei dati, perché le finestre
@@ -315,10 +315,10 @@ Versioni attuali, dopo l'aggiunta della v2 e delle prove 1–2 (i valori della v
 verificato chiave per chiave; identici su due esecuzioni):
 
 ```
-505c7c339b62c549ba53f681aa655dcbc3947efab664281e1da49011c6990a89  results/summary.json
+3e08eeb89edcef759ed3f4787a7f9dd280a2fe75bd2e8acd2da08e3264fcac69  results/summary.json
 e07742d15e1f3d39fc6a653b0ffd1a411807a7ba03874fb1a59d8ecbf7e54a00  results/sweep.csv
-ec661777e2f947f88592d05253a16c64a83d93e24768e438352ebbe460eb0848  results/wildppg_summary.json
+d7ee80ad8c4828990ee720aa8c01ade15ad91b35f876ab87be44b472424ea76e  results/wildppg_summary.json
 c7c36aabfd3b416dd4f65ad3fb3b4aefb6dc12fd26cba42f3caf487c99cee6a9  results/wildppg_sweep.csv
-3d8e8b01dd227606b53476d28974126619d75f40b0847508066f60dd95f107d2  results/oracle_check.json
+0788494a683c284bcae563b84773e14e17f0be741ef30a23912506ca3d0cfa31  results/oracle_check.json
 bfb3d2b6af0198315bffa69950bdaa828f4ff7f7f29e63cf6491d7c3a1ac77a3  results/sqi_calibration.json
 ```

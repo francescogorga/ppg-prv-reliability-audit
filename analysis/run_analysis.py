@@ -280,6 +280,7 @@ def main():
         "in_loop_0.4": (df["rmssd_inloop_0.4"].to_numpy(), df["rmssd_inloop_0.4"].notna()),
         "motion_same_cov": (df["rmssd_off"].to_numpy(), pd.Series(m_acc)),
         "inverted_input_none (not the app)": (df["rmssd_inverted_off"].to_numpy(), kept_mask(df, "inverted_off", None, 0)),
+        "v2_none (not the app)": (df["rmssd_v2"].to_numpy(), kept_mask(df, "v2", None, 0)),
     }
     for tau in HIGH_TAUS:
         masks[f"sqi_full>={tau} (post hoc)"] = (df["rmssd_off"].to_numpy(), kept_mask(df, "off", "sqi_full", tau))

@@ -1,64 +1,67 @@
-# Our PPG quality gate did not reduce HRV error: in the lab it never fired, in daily life it discarded data without improving accuracy
+# Fix beat timing before gating: a PPG quality gate cannot rescue a bad beat detector, but once beats are timed correctly a calibrated gate halves the HRV error
 
 *Francesco Gorga, MSc student, Politecnico di Milano. Draft, 28 Sep 2026. Code, results and full method: github.com/francescogorga/ppg-sqi-hrv-audit*
 
 ## Summary
 
-- I ran our smart-glasses app's PPG pipeline (MAX30101, 100 Hz, processing on the phone), ported to Python and verified against the Dart code, on two public datasets with an ECG reference. One is finger/lab (22 subjects, 491 one-minute windows), the other forehead/daily life (2 participants, 1,343 windows).
-- **Finger**: median RMSSD error **85.5 ms** (true median 22.3 ms). At the app's threshold (0.4) the signal-quality index (SQI) discarded nothing and removed nothing. **Forehead**: **136 ms** (true 14.8 ms). The SQI discarded 42% of usable windows, and the error moved to 130 ms, a change not distinguishable from zero.
-- The error comes from beat detection, which the SQI does not measure. Timing beats on the systolic peak (offline only, not in the app) cut the finger error to **18.1 ms**.
+- I audited the PPG pipeline of our smart-glasses prototype app (MAX30101, 100 Hz, processing on the phone). I ported it to Python, verified it against the original Dart code, and ran it on two public datasets with an ECG reference: finger in the lab (22 subjects, 491 one-minute windows) and forehead in daily life (2 participants, 1,343 windows).
+- **As deployed**, the app's signal-quality index (SQI) did not help. On the finger the median RMSSD error was **85.5 ms** (true median 22.3 ms) and the SQI discarded nothing. At the forehead it discarded 42% of the data with no meaningful gain. Even a *perfect* gate would leave 48 ms at half the finger data, because only 1% of windows were good.
+- **Timing beats on the systolic peak** (a one-line change, tested offline) cut the finger error to **18.1 ms**. On top of that, a gate calibrated on other subjects halved it again: **8.5 ms** with the SQI and **6.0 ms** with an accelerometer, keeping half the data. At the forehead in daily life nothing worked.
 
 ## Method
 
-- **Pipeline.** A line-by-line Python port of the app (0.5–3.5 Hz band-pass, adaptive-threshold peak detector, RR acceptance rules, RMSSD, SQI). It matches the original Dart classes on every intermediate output. The sampling rate is a parameter: a 100 Hz re-run of the 128 Hz forehead data gave 134.7 vs 136.1 ms.
-- **SQI.** The SQI is **an unvalidated heuristic, hand-calibrated on our nose-bridge prototype**:
-  `SQI = (0.4·amplitude + 0.6·periodicity) × artifact penalty`.
-  - Amplitude is the AC/DC modulation, at full score from 0.02%.
-  - Periodicity is `1 − 0.5·CV` of the RR intervals.
-  - The penalty halves the score above 2% modulation and zeroes it above 3%.
-- **Data.** Both datasets have an ECG, used only as ground truth (the glasses carry PPG and skin temperature, no ECG).
-  - *Finger*: PhysioNet *Pulse Transit Time PPG Dataset* v1.1.0 (ODbL). Finger-clip MAX30101 raw IR with DC, manually verified R peaks, sitting/walking/running, resampled to 100 Hz.
-  - *Forehead*: *WildPPG* (ETH Zurich, NeurIPS 2024; CC BY-NC-SA 4.0). 12 h per person of free-living recordings, forehead MAX86141 PPG, Lead-I ECG, 128 Hz. WildPPG stores PPG in blood-volume polarity, so I inverted the IR channel to the light polarity the app receives; this is inferred from the waveform and the authors' code. R peaks were detected automatically: validated at 128 Hz on the finger dataset's manual annotations, the reference RMSSD differs by a median 0.19 ms (90th percentile 0.66 ms).
-- **Evaluation.** Non-overlapping 60 s windows; reference RMSSD from ECG R–R intervals; PPG RMSSD from the intervals the app accepts (at least 10 per window). A window is kept if its median 1 Hz SQI is ≥ τ, with τ swept from 0 to 1. Ablation: full SQI vs each term alone. Comparison: an accelerometer gate keeping the same share of windows. 95% CIs by bootstrap over subjects (finger) or 10-minute blocks (forehead). Every number comes from a saved script output, and both analyses re-run bit-identically.
+- **Pipeline.** A line-by-line Python port of the app (0.5–3.5 Hz band-pass, adaptive-threshold peak detector, RR acceptance rules, RMSSD, SQI), matching the original Dart classes on every intermediate output.
+  - *v1* is the app as deployed: it times beats on maxima of the raw light signal.
+  - *v2* is identical except that the detector runs on the negated signal, i.e. on the systolic peak. It is not in the app.
+- **SQI.** An unvalidated heuristic hand-calibrated on our nose-bridge prototype: `(0.4·amplitude + 0.6·periodicity) × artifact penalty`. Amplitude is AC/DC modulation (full score from 0.02%); periodicity is `1 − 0.5·CV` of the RR intervals; the penalty acts above 2–3% modulation.
+- **Data.** The ECG is ground truth only; the glasses carry PPG and skin temperature, no ECG.
+  - *Finger*: PhysioNet *Pulse Transit Time PPG Dataset* v1.1.0 (ODbL). Finger-clip MAX30101, raw IR, manually verified R peaks, sitting/walking/running, 100 Hz.
+  - *Forehead*: *WildPPG* (NeurIPS 2024; CC BY-NC-SA 4.0). 12 h per person of free-living recordings, forehead MAX86141 IR, Lead-I ECG, 128 Hz. IR inverted to the light polarity the app receives (inferred from the waveform and the authors' code). R peaks detected automatically; validated on the finger dataset, the reference RMSSD differs by a median 0.19 ms.
+- **Evaluation.** 60 s windows; RMSSD from the RR intervals each pipeline accepts vs ECG R–R RMSSD.
+  - *Oracle*: keeps the windows with the lowest true error. It needs the ECG, so it is unreachable; it is the ceiling for any gate.
+  - *Honest calibration*: gate thresholds set on 11 finger subjects to keep a target share of data, then tested on the other 11, over 200 random splits. At the forehead, calibrate on one participant and test on the other.
+  - 95% CIs by bootstrap over subjects (finger) or 10-minute blocks (forehead). Every number comes from a saved script output, and all analyses re-run bit-identically.
 
 ## Result
 
-| | Windows kept | Median abs. RMSSD error (95% CI) |
+| | Windows kept | Median abs. RMSSD error |
 |---|---|---|
-| **Finger, lab** — app pipeline, no gate | 97.8% | 85.5 ms (65.7–101.5); r = 0.11 |
-| + SQI ≥ 0.4 (the app's threshold) | 97.8% | 85.5 ms; reduction CI [0.0, 0.0] ms |
-| + SQI ≥ 0.97 (post hoc) | 40.3% | 45.8 ms (38.3–52.7); accelerometer gate, same coverage: 57.8 ms |
-| Systolic-peak timing, no gate (offline only) | 97.4% | 18.1 ms (10.0–34.0); sitting: 4.2 ms |
-| **Forehead, daily life** — app pipeline, no gate | 67.2% | 136.1 ms (128.5–144.0); r = 0.12 |
-| + SQI ≥ 0.4, per window | 39.2% | 130.3 ms; reduction CI [−1.6, 10.5] ms |
-| + SQI ≥ 0.4 inside the loop, as the app does | 40.4% | 125.2 ms; reduction CI [3.5, 15.6] ms |
-| Systolic-peak timing, no gate (offline only) | 64.3% | 113.7 ms (103.7–121.3) |
+| **Finger, lab** — v1 (app), no gate | 97.8% | 85.5 ms (95% CI 65.7–101.5) |
+| v1 + SQI ≥ 0.4, the app's threshold | 97.8% | 85.5 ms; reduction CI [0.0, 0.0] |
+| v1 + perfect gate (oracle) | 50% | 48.4 ms |
+| v2, no gate | 97.4% | 18.1 ms (10.0–34.0) |
+| v2 + SQI, threshold calibrated on other subjects | 50% (28–76) | **8.5 ms** (5.7–11.9)\* |
+| v2 + accelerometer, calibrated on other subjects | 50% (40–61) | **6.0 ms** (4.3–11.9)\* |
+| **Forehead, daily life** — v1 (app), no gate | 67.2% | 136.1 ms (128.5–144.0) |
+| v1 + SQI ≥ 0.4 | 39.2% | 130.3 ms; reduction CI [−1.6, 10.5] |
+| v2, no gate | 64.3% | 113.7 ms (103.7–121.3) |
 
-Why the gate failed, in two opposite ways:
+\* median and 2.5–97.5th percentile over 200 subject splits; the oracle at the same coverage is 5.5 ms.
 
-1. **In the lab it never fired.** The amplitude term was 1.0 in all 491 finger windows (median modulation 0.35–0.49% vs a 0.02% full-score point), and the median window SQI was 0.96–0.97 even while running.
-2. **In daily life it fired without tracking the error.** At the forehead the modulation index was 2.5–4.5%, so the artifact penalty was active in 56–68% of seconds. It discarded windows, but the kept ones had a median error of 130 ms against 140 ms for the dropped ones, both about nine times the median true RMSSD. Inside the loop, as the app applies it, it removed 3.5–15.6 ms (95% CI) while keeping 40% of windows instead of 67%.
-3. **The error sits in beat detection, which the SQI does not see.**
-   - *Finger.* The detector times beats on the maxima of the raw light signal, the broad diastolic foot: timing IQR vs ECG 96.8 ms and 25.1% of beats missed, against 24.0 ms and 4.0% on the systolic peak.
-   - *Forehead.* 49–61% of ECG beats had no PPG peak. The IR channel carried little cardiac signal: in the quietest windows its spectral heart rate matched the ECG within 5 bpm in 30% and 5% of cases, against 76% and 56% for green. Even green with systolic timing gave 63–69 ms.
+Three findings:
 
-![RMSSD error and share of windows kept as a function of the SQI threshold, finger (top) and forehead (bottom)](fig_sqi_tradeoff.png)
+1. **The deployed threshold was wrong, but that was the smaller problem.** Used as a ranking, the SQI was almost as good as the oracle on the finger (50.6 vs 48.4 ms at half the data); a threshold of 0.4 simply never fired there. The amplitude term was 1.0 in every finger window. At the forehead, the artifact penalty fired in 56–68% of seconds without selecting better windows.
+2. **No gate can rescue a bad beat detector.** With v1 only 1.2% of finger windows and 0% of forehead windows had an error ≤ 5 ms. v1 times beats on the broad diastolic foot: timing spread vs the ECG was 96.8 ms (IQR) and 25.1% of beats were missed, against 24.0 ms and 4.0% on the systolic peak.
+3. **After fixing beat timing, gating pays off, but only when calibrated against a reference.** With v2, 23.6% of finger windows were good, and a gate calibrated on other people halved the error at half the data. A plain accelerometer did at least as well as the SQI and its threshold transferred more consistently between people. Thresholds did **not** transfer between the two forehead participants, nor from finger to forehead; there, even the oracle stayed above 96 ms at half the data.
+
+![Median RMSSD error vs share of windows kept, for the oracle and three gates, with the app pipeline (left) and v2 (right)](fig_gates.png)
 
 ## What this could mean for a wearable-data platform
 
 These are modest suggestions from a small study, not recommendations.
 
-- **A quality score can fail in both directions.** It can stay high while the output is wrong (lab), or reject data without selecting better output (daily life). If a device's quality metadata is passed through, the useful information is what it was validated against, not the number alone.
-- **Beat-level counts flagged the problem; the quality score did not.** "25% of beats missed" (finger) and "49–61% missed" (forehead) were the warning signs. Two cheap fields next to an HRV value would let a consumer apply its own gate: beats used, and beats rejected or missing in the window. The same holds for window length and method.
-- For context: in Terra's public OpenAPI schema (`tryterra/openapi`, commit `9eccc73`, checked 28 Sep 2026), HR, HRV (RMSSD/SDNN) and RR-interval samples carry no quality or confidence field. HR samples carry an activity `context`. I have not checked what individual providers return in practice.
+- **Beat timing matters more than the quality flag.** Two pipelines on the same sensor differed almost fivefold in RMSSD error (85.5 vs 18.1 ms); no gate closed that gap. Knowing *how* an HRV value was computed (fiducial point, window length, beats used) says more than a quality score.
+- **Quality thresholds are site- and person-specific.** A threshold calibrated on finger data kept 1–14% of forehead data, and forehead thresholds did not transfer between two people. A score passed through without its calibration context can mislead.
+- **Beat-level counts are cheap and informative.** Next to an HRV value, the number of beats used and the number missed or rejected would let a consumer apply its own gate.
+- For context: in Terra's public OpenAPI schema (`tryterra/openapi`, commit `9eccc73`, checked 28 Sep 2026), HR, HRV and RR-interval samples carry no quality or confidence field; HR samples carry an activity `context`. I have not checked what individual providers return in practice.
 
 ## Limitations
 
-- **No data from the glasses.** The hardware was returned at the end of the course, and the app never stored the raw signal. Neither dataset uses the nose bridge.
-- **Forehead sample.** Only 2 of 16 WildPPG participants were analysed, because I capped the download at ~3 GB (the full raw set is 19.6 GB). Its CIs capture variation within these two people, not between people. The polarity of the forehead signal was inferred.
-- **Thresholds and variants.** The SQI thresholds were tuned for the nose. Thresholds of 0.96–0.98 were picked after seeing the data. The systolic-peak variant is an offline test, not a validated change.
+- **No data from the glasses.** The hardware was returned after the course and the app never stored the raw signal; neither dataset uses the nose bridge.
+- **Scope of the positive result.** The calibrated-gate result holds on lab finger data (22 subjects). At the forehead only 2 of 16 WildPPG participants were analysed (download capped at ~3 GB), and their polarity was inferred.
+- **Offline variant.** v2 is an offline test, not a validated change to the app. The oracle is a ceiling, not an achievable method.
 - **Signal path.** Neither dataset reproduces BLE packet loss or a possible firmware FIFO read issue in the prototype.
 
 ## Next step
 
-Run the forehead analysis on all 16 WildPPG participants; the scripts are ready, and only the 19.6 GB transfer is missing. Then test whether a beat-level quality measure, such as the share of missed beats or beat-to-template correlation, tracks RMSSD error better than this SQI. Both should be judged against the ECG reference, not by eye.
+Run all 16 WildPPG participants (the scripts are ready; a 19.6 GB transfer). Then test a beat detector designed for daily-life head PPG, e.g. on the green channel. Finally, check whether a beat-level quality measure, such as the share of missed beats, transfers across people better than the SQI, judged against the ECG reference.

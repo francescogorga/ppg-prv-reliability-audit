@@ -168,7 +168,8 @@ def main():
     masks = {"none": ("rmssd_app", kept("app", None, 0)),
              "sqi_full>=0.4": ("rmssd_app", kept("app", "sqi_full", APP_TAU)),
              "in_loop_0.4": ("rmssd_inloop_0.4", df["rmssd_inloop_0.4"].notna()),
-             "systolic_none (not the app)": ("rmssd_systolic", kept("systolic", None, 0))}
+             "systolic_none (not the app)": ("rmssd_systolic", kept("systolic", None, 0)),
+             "v2_none (not the app)": ("rmssd_v2", kept("v2", None, 0))}
     for tau in HIGH_TAUS:
         masks[f"sqi_full>={tau} (post hoc)"] = ("rmssd_app", kept("app", "sqi_full", tau))
     ae = {k: np.abs(df[c].to_numpy() - df["ref_rmssd"].to_numpy()) for k, (c, _) in masks.items()}

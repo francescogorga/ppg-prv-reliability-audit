@@ -35,10 +35,10 @@ MIN_KEEP = 20
 DATASETS = {
     "finger_lab": dict(csv="windows.csv", runs={
         "app": ("rmssd_off", "sqi_full_off", "sqi_per_off"),
-        "systolic (not in app)": ("rmssd_inverted_off", "sqi_full_inverted_off", "sqi_per_inverted_off")}),
+        "v2, systolic peak (not in app)": ("rmssd_v2", "sqi_full_v2", "sqi_per_v2")}),
     "forehead_daily_life": dict(csv="wildppg_windows.csv", runs={
         "app": ("rmssd_app", "sqi_full_app", "sqi_per_app"),
-        "systolic (not in app)": ("rmssd_systolic", "sqi_full_systolic", "sqi_per_systolic"),
+        "v2, systolic peak (not in app)": ("rmssd_v2", "sqi_full_v2", "sqi_per_v2"),
         "green, app polarity": ("rmssd_green", "sqi_full_green", "sqi_per_green")}),
 }
 
@@ -110,10 +110,10 @@ def main():
     plt.rcParams.update({"font.size": 9, "axes.edgecolor": INK2, "axes.labelcolor": INK,
                          "xtick.color": INK2, "ytick.color": INK2})
     fig, axes = plt.subplots(2, 2, figsize=(9, 6.6), facecolor=SURFACE)
-    panels = [("finger_lab", "app"), ("finger_lab", "systolic (not in app)"),
-              ("forehead_daily_life", "app"), ("forehead_daily_life", "systolic (not in app)")]
-    titles = ["A  Finger, lab — app pipeline", "B  Finger, lab — systolic-peak timing (not in app)",
-              "C  Forehead, daily life — app pipeline", "D  Forehead, daily life — systolic-peak timing (not in app)"]
+    panels = [("finger_lab", "app"), ("finger_lab", "v2, systolic peak (not in app)"),
+              ("forehead_daily_life", "app"), ("forehead_daily_life", "v2, systolic peak (not in app)")]
+    titles = ["A  Finger, lab — app pipeline (v1)", "B  Finger, lab — v2: systolic-peak timing (not in app)",
+              "C  Forehead, daily life — app pipeline (v1)", "D  Forehead, daily life — v2 (not in app)"]
     for ax, key, title in zip(axes.flat, panels, titles):
         ax.set_facecolor(SURFACE)
         ax.grid(True, color=GRID, linewidth=0.6)
