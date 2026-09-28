@@ -511,5 +511,33 @@
       30.573749592011904
     ]
   },
+  "v2_no_filter (not the app)": {
+    "run": "v2",
+    "variant": "sqi_full",
+    "tau": 0.0,
+    "coverage": 0.9735234215885947,
+    "n_subjects": 22,
+    "n": 478,
+    "median_abs_err": 18.12675162015907,
+    "mean_abs_err": 43.913885103492696,
+    "median_abs_pct_err": 86.14705935469873,
+    "pearson_r": 0.05874886957100364,
+    "spearman_rho": 0.08178463169177759,
+    "ba_bias": 43.81769316221196,
+    "ba_loa_low": -64.64144361380747,
+    "ba_loa_high": 152.27682993823137
+  },
+  "v2_in_loop_0.4 (not the app)": {
+    "coverage": 0.9735234215885947,
+    "n": 478,
+    "median_abs_err": 18.12675162015907,
+    "mean_abs_err": 43.91502772409817,
+    "median_abs_pct_err": 86.14705935469873,
+    "pearson_r": 0.05874028689405207,
+    "spearman_rho": 0.0817890266976555,
+    "ba_bias": 43.818835782817445,
+    "ba_loa_low": -64.64223036188113,
+    "ba_loa_high": 152.27990192751602
+  },
   "n_nan_ppg_samples_total": 0
 }

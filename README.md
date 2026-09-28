@@ -28,16 +28,40 @@ Every number in the brief comes from a script in `analysis/` whose output is sav
 `analysis/results/`. Both analyses re-run bit-identically; SHA-256 hashes are listed in
 [`analysis/README.md`](analysis/README.md).
 
+## Follow-up: was the gate wrong, or can no gate help?
+
+Two further tests, not yet in the brief. Details in `analysis/README.md` §9.
+
+**Test 1: the ceiling.** An oracle keeps the windows with the lowest *true* error. It needs the
+ECG, so it is unreachable, but it shows the best any gate could do.
+- *Finger*: ranked by the app's SQI, the error at half the data is 50.6 ms, against 48.4 ms for the
+  oracle. The ranking was close to the ceiling; the threshold of 0.4 was the problem.
+- *App pipeline*: even a perfect gate cannot help much, because only 1.2% of finger windows and 0% of
+  forehead windows have an error ≤ 5 ms.
+
+**Test 2: honest calibration.** Thresholds are chosen on 11 subjects and tested on the other 11, over
+200 random splits.
+- The pipeline is **v2**: the same app pipeline, with beats timed on the systolic peak (not in the app).
+- Keeping half the data on unseen subjects, the error falls from 18.0 to **8.5 ms** with the SQI, and to
+  **6.0 ms** with an accelerometer gate. The oracle reaches 5.5 ms.
+- At the forehead, thresholds transfer neither between participants nor from the finger.
+
+**Conclusion.** Fix beat timing first. A gate calibrated against a reference then roughly halves the
+error for half the data, and in the lab a plain accelerometer gate does at least as well.
+
+![Oracle vs gates](analysis/results/fig_oracle.png)
+
 ## What is in this repository
 
 | Path | Content |
 |---|---|
 | `analysis/app_pipeline.py` | Line-by-line Python port of the app's PPG pipeline: band-pass filter, peak detector, RR acceptance, RMSSD and SQI. The sampling rate is a parameter. |
-| `analysis/tests/` | 30 tests. 27 check equivalence with the original Dart code (see Provenance); the rest cover the ECG R-peak detector and options. |
+| `analysis/tests/` | 33 tests. 27 check equivalence with the original Dart code (see Provenance); the rest cover the ECG R-peak detector, options and v2. |
 | `analysis/run_analysis.py` | Finger analysis (PhysioNet PTT-PPG). |
 | `analysis/run_wildppg.py`, `analysis/wildppg_channel_check.py` | Forehead analysis (WildPPG). |
 | `analysis/ecg_rpeaks.py`, `analysis/validate_rpeaks.py` | R-peak detector for WildPPG, validated against manual annotations. |
 | `analysis/fiducial_check.py` | Where the detected PPG beats fall relative to the ECG R wave. |
+| `analysis/oracle_check.py`, `analysis/calibrate_sqi.py` | Follow-up tests 1 and 2. |
 | `analysis/check_terra_schema.sh` | Checks whether a public wearable-API schema has quality fields. |
 | `analysis/results/` | All outputs: JSON, CSV, figure. |
 | `brief/` | The brief (Markdown and PDF) and the script that builds the PDF. |

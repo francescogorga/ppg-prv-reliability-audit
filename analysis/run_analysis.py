@@ -87,7 +87,10 @@ def process(name: str) -> list[dict]:
     }
     for g in IN_LOOP_GATES:
         runs[f"inloop_{g}"] = ap.run_session(ir1, FS_APP, gate=g, record_per_sample=False)
-    ticks = {k: tick_frame(runs[k], FS_APP) for k in ("off", "sensor2_off", "inverted_off")}
+    # v2 (not in the app): same pipeline, beats timed on the systolic peak
+    runs["v2"] = ap.run_session(ir1, FS_APP, gate=None, record_per_sample=False, tick_parts=True, systolic=True)
+    runs["v2_inloop_0.4"] = ap.run_session(ir1, FS_APP, gate=0.4, record_per_sample=False, systolic=True)
+    ticks = {k: tick_frame(runs[k], FS_APP) for k in ("off", "sensor2_off", "inverted_off", "v2")}
 
     duration = len(rec.ir1) / rec.fs
     rows = []
@@ -142,7 +145,7 @@ def kept_mask(df, run, comp, tau):
 def sweep(df: pd.DataFrame) -> pd.DataFrame:
     total = len(df)
     out = []
-    for run in ("off", "sensor2_off", "inverted_off"):
+    for run in ("off", "sensor2_off", "inverted_off", "v2"):
         for comp in ("sqi_full", "sqi_amp", "sqi_per"):
             for tau in TAUS:
                 m = kept_mask(df, run, comp, tau)
@@ -291,6 +294,11 @@ def main():
     }
     summary["ref_rmssd_ms"] = dict(median=float(df["ref_rmssd"].median()),
                                    iqr=[float(df["ref_rmssd"].quantile(0.25)), float(df["ref_rmssd"].quantile(0.75))])
+    summary["v2_no_filter (not the app)"] = pick("v2", "sqi_full", 0.0)
+    m = df["rmssd_v2_inloop_0.4"].notna()
+    d = df[m]
+    summary["v2_in_loop_0.4 (not the app)"] = dict(coverage=float(m.sum() / total), **metrics(
+        (d["rmssd_v2_inloop_0.4"] - d["ref_rmssd"]).to_numpy(), d["rmssd_v2_inloop_0.4"].to_numpy(), d["ref_rmssd"].to_numpy()))
     summary["n_nan_ppg_samples_total"] = int(df.drop_duplicates("record")["n_nan_samples"].sum())
 
     (OUT / "summary.json").write_text(json.dumps(summary, indent=2))

@@ -23,6 +23,9 @@ e ha dato risultati identici bit per bit (hash SHA-256 in fondo).
 | `ecg_rpeaks.py`, `validate_rpeaks.py` | Rilevatore di picchi R (per WildPPG, che non ha annotazioni) e sua validazione sui picchi manuali di PTT-PPG a 128 Hz. |
 | `load_wildppg.py`, `download_wildppg.sh` | Download da polybox ETH, estrazione dei canali usati, cancellazione del grezzo. |
 | `run_wildppg.py`, `wildppg_channel_check.py` | Analisi alla fronte (WildPPG) e controllo canale IR/verde. |
+| `oracle_check.py` | Prova 1: il limite massimo di un filtro qualsiasi (oracolo che conosce l'errore vero). |
+| `calibrate_sqi.py` | Prova 2: soglie tarate su una parte delle persone e misurate sulle altre. |
+| `tests/test_v2.py` | 3 test della v2 (battito sul picco sistolico). |
 | `reproduce.sh` | Rifà tutto da zero. |
 | `results/` | Output (CSV, JSON, figura, log). |
 
@@ -31,7 +34,7 @@ e ha dato risultati identici bit per bit (hash SHA-256 in fondo).
 `tests/test_port.py` confronta il porting con l'output delle classi Dart originali su 5 segnali
 sintetici (100, 64 e 125 Hz; pulito, con artefatti di movimento, sensore staccato), sia con gate SQI
 0,4 sia senza gate. Filtrato (tolleranza 1e-9), picchi (identici), SQI per campione (1e-12), RMSSD a
-1 Hz, numero di intervalli nel buffer e buffer RR finale coincidono. Esito, con gli altri 3 test: **30 passed**
+1 Hz, numero di intervalli nel buffer e buffer RR finale coincidono. Esito, con gli altri test: **33 passed**
 (`results/pytest_output.txt`).
 
 L'ordine delle operazioni per pacchetto (`home_page.dart:151-199`) è una mia trascrizione, perché
@@ -224,7 +227,64 @@ Osservazioni:
 non tra persone. La polarità è inferita. Il riferimento è automatico, anche se validato. Licenza non
 commerciale.
 
-## 9. Riprodurre
+## 9. Il filtro era sbagliato, o nessun filtro aiuta? (prove 1 e 2)
+
+**v2 (non è nell'app).** È la stessa pipeline, con un'unica modifica: il rilevatore lavora sul segnale
+filtrato cambiato di segno, quindi colloca il battito sul picco sistolico invece che sul piede
+(`app_pipeline.py`, `PpgProcessor(systolic=True)`). La v1 resta identica all'app (test invariati); la
+v2 ha 3 test propri. Risultati senza filtro: dito 18,1 ms (bias +43,8 ms, r = 0,06: pochi errori molto
+grandi durante il movimento), fronte 113,7 ms. Sono uguali alla variante col segnale invertito usata prima.
+
+**Prova 1 — oracolo** (`results/oracle_check.json`, `results/fig_oracle.png`). Ordino le finestre per
+errore vero (serve l'ECG, quindi è irraggiungibile) e tengo le migliori: è il massimo che un filtro può
+fare. Errore mediano tenendo il 50% delle finestre:
+
+| | Oracolo | SQI app | Solo periodicità | Accelerometro | Senza filtro | Finestre buone (≤ 5 ms) |
+|---|---|---|---|---|---|---|
+| Dito, v1 (app) | 48,4 | 50,6 | 50,6 | 62,2 | 85,5 | 1,2% |
+| Dito, picco sistolico | 5,5 | 8,7 | 8,7 | 6,0 | 18,1 | 23,6% |
+| Fronte, v1 (app) | 120,7 | 133,2 | 132,0 | 138,1 | 136,1 | 0% |
+| Fronte, picco sistolico | 96,5 | 108,8 | 104,0 | 109,9 | 113,7 | 0,1% |
+
+- Sul dito l'SQI, **usato come classifica**, è quasi al livello dell'oracolo: il difetto era la soglia 0,4.
+- Con la v1 nemmeno un filtro perfetto scende sotto ~48 ms tenendo metà dei dati, perché le finestre
+  buone quasi non esistono. Alla fronte non esistono affatto.
+- Sul dito il termine di ampiezza vale sempre 1, quindi SQI completo e sola periodicità danno la
+  stessa classifica.
+
+**Prova 2 — soglie tarate in modo onesto** (`results/sqi_calibration.json`).
+- *Dito*: 200 divisioni casuali in 11 persone di taratura e 11 di test. La soglia è scelta sulla metà di
+  taratura per tenere il 75/50/25% dei dati, poi applicata così com'è alla metà di test.
+- *Fronte*: taratura su un partecipante, test sull'altro.
+- *Trasferimento*: soglie tarate sul dito e applicate alla fronte.
+
+Dito, v2, sulle persone di test (mediana [2,5°–97,5° percentile] sulle 200 divisioni; senza filtro 18,0 ms):
+
+| Obiettivo | Filtro | Dati tenuti | Errore | Oracolo alla stessa copertura |
+|---|---|---|---|---|
+| 50% | SQI (= periodicità) | 50% [28–76] | **8,5 ms** [5,7–11,9] | 5,5 |
+| 50% | Accelerometro | 50% [40–61] | **6,0 ms** [4,3–11,9] | 5,5 |
+| 25% | SQI | 25% [10–45] | 7,6 ms [4,9–11,4] | 3,1 |
+| 25% | Accelerometro | 24% [11–33] | 3,7 ms [2,3–5,4] | 2,7 |
+| 75% | SQI | 74% [50–92] | 10,0 ms [7,7–16,5] | 9,1 |
+| 75% | Accelerometro | 75% [63–88] | 11,9 ms [6,2–28,3] | 9,3 |
+
+- **Con la v2 e una soglia tarata, il filtro funziona anche su persone mai viste**: tenendo metà dei
+  dati l'errore si dimezza (da 18 a 8,5 ms con l'SQI, 6,0 con l'accelerometro). L'accelerometro è più
+  vicino all'oracolo e la copertura che ottiene varia meno tra le divisioni; la soglia dell'SQI si
+  trasferisce meno bene tra persone (coverage 28–76%).
+- Con la v1 tarata: 50,7 ms al 50% (senza filtro 84,4), cioè ancora più di 2 volte il valore vero.
+- *Fronte*: le soglie non si trasferiscono tra i due partecipanti. Tarate su `e61`, su `an0` non scartano
+  nulla; tarate su `an0`, su `e61` tengono meno dati del previsto. Gli errori restano tra 80 e 146 ms.
+- *Dal dito alla fronte*: le soglie del dito (0,95–0,985) tengono solo l'1–14% delle finestre della
+  fronte, con errori di 39–75 ms. **Una soglia non si trasferisce tra siti.**
+
+**Conclusione.** Il filtro dell'app era tarato male (soglia 0,4), ma non era il problema principale.
+Prima va corretto il punto in cui si colloca il battito. Dopo, un filtro tarato su un riferimento
+dimezza l'errore al prezzo di metà dei dati, e in laboratorio un semplice accelerometro fa almeno
+altrettanto bene. Alla fronte, nella vita reale, nessun filtro basta con questi dati.
+
+## 10. Riprodurre
 
 ```bash
 cd analysis
@@ -235,7 +295,7 @@ Richiede Python 3 (usato 3.14.3), le versioni in `requirements.txt` e, per i tes
 Dart (usato quello di Flutter). Seed: 20260928. Tempo: circa 1 minuto più il download.
 `data/ptt_ppg/` (411 MB) si può cancellare e riscaricare.
 
-SHA-256 dei risultati sul dito (identici su due esecuzioni complete):
+SHA-256 dei risultati sul dito prima dell'aggiunta della v2 (identici su due esecuzioni complete; le versioni attuali sono in fondo):
 
 ```
 f9585a79e486cd682141654a385de11b8aea14648cd63fd108cd33fa6c23719c  results/summary.json
@@ -249,4 +309,16 @@ SHA-256 dei risultati alla fronte (identici su due esecuzioni di `run_wildppg.py
 c4587a81cc8eb61f0e466e8098253ed7f34eac42af6c6ac6e91f0eee8deccdda  results/wildppg_summary.json
 89ec51b9b95b1fd6b6f865e78b8dc3a28d12188233d2210546d3e4e8d57d6eb6  results/wildppg_sweep.csv
 f69e947435323ce9f2a771dac8357c567f452a66a79ea5fac09d681208773bc2  results/wildppg_windows.csv
+```
+
+Versioni attuali, dopo l'aggiunta della v2 e delle prove 1–2 (i valori della v1 sono invariati,
+verificato chiave per chiave; identici su due esecuzioni):
+
+```
+505c7c339b62c549ba53f681aa655dcbc3947efab664281e1da49011c6990a89  results/summary.json
+e07742d15e1f3d39fc6a653b0ffd1a411807a7ba03874fb1a59d8ecbf7e54a00  results/sweep.csv
+ec661777e2f947f88592d05253a16c64a83d93e24768e438352ebbe460eb0848  results/wildppg_summary.json
+c7c36aabfd3b416dd4f65ad3fb3b4aefb6dc12fd26cba42f3caf487c99cee6a9  results/wildppg_sweep.csv
+3d8e8b01dd227606b53476d28974126619d75f40b0847508066f60dd95f107d2  results/oracle_check.json
+bfb3d2b6af0198315bffa69950bdaa828f4ff7f7f29e63cf6491d7c3a1ac77a3  results/sqi_calibration.json
 ```

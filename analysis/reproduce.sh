@@ -18,7 +18,10 @@ fi
 ./download_wildppg.sh an0 e61                           # ~2.2 GB transfer, raw deleted after extraction
 .venv/bin/python run_wildppg.py                         # results/wildppg_*.{csv,json}
 .venv/bin/python wildppg_channel_check.py > /dev/null   # results/wildppg_channel_check.json
+.venv/bin/python oracle_check.py > /dev/null            # results/oracle_check.json, fig_oracle.{png,pdf}
+.venv/bin/python calibrate_sqi.py                       # results/sqi_calibration.json
 .venv/bin/python make_figure.py                         # results/fig_sqi_tradeoff.{png,pdf}
 ./check_terra_schema.sh                                 # results/terra_schema_check.txt (network)
 shasum -a 256 results/summary.json results/sweep.csv results/fiducial_check.json \
-  results/rpeak_validation.json results/wildppg_summary.json results/wildppg_sweep.csv
+  results/rpeak_validation.json results/wildppg_summary.json results/wildppg_sweep.csv \
+  results/oracle_check.json results/sqi_calibration.json

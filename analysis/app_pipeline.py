@@ -190,12 +190,19 @@ class HeartRateTracker:
 
 
 class PpgProcessor:
-    """ppg_processor.dart:203-241 with the app's parameters."""
+    """ppg_processor.dart:203-241 with the app's parameters.
+
+    systolic=True is "v2", NOT in the app: the peak detector runs on the negated
+    filtered signal, so with raw MAX30101 input (light drops at systole) it times
+    beats on the systolic peak instead of the diastolic foot. Everything else,
+    including last_filtered fed to the SQI, is unchanged.
+    """
 
     AVG_WINDOW = 2
 
-    def __init__(self, fs=100.0):
+    def __init__(self, fs=100.0, systolic=False):
         self.fs = fs
+        self.systolic = systolic
         self.filter = BandPassFilter(fs, 0.5, 3.5)
         self.detector = PeakDetector(fs=fs, threshold_sigma=0.8, window_ms=4000, refractory_ms=400)
         self.hr = HeartRateTracker(fs=fs)
@@ -213,7 +220,7 @@ class PpgProcessor:
             return False
         smoothed = _seq_sum(self._avg) / self.AVG_WINDOW
         self.last_filtered = self.filter.process(smoothed)
-        self.last_peak = self.detector.process(self.last_filtered)
+        self.last_peak = self.detector.process(-self.last_filtered if self.systolic else self.last_filtered)
         return True
 
     def process(self, sample: float, good_quality: bool):
@@ -332,7 +339,7 @@ class SessionResult:
 
 
 def run_session(ir_na, fs=100.0, gate=0.4, warmup_samples=None, record_per_sample=True,
-                tick_every=None, tick_parts=False, record_sqi=True) -> SessionResult:
+                tick_every=None, tick_parts=False, record_sqi=True, systolic=False) -> SessionResult:
     """Replays home_page.dart _onPacket for a stream of IR samples (already in nA).
 
     gate: SQI threshold used as `goodQuality` for RR acceptance (app: 0.4).
@@ -340,12 +347,13 @@ def run_session(ir_na, fs=100.0, gate=0.4, warmup_samples=None, record_per_sampl
     warmup_samples: packets before SQI starts receiving data (app: 300 at 100 Hz,
           i.e. 3 s; scaled with fs when None).
     tick_every: samples between 1 Hz-style snapshots (default fs).
+    systolic: False = the app (v1); True = v2, beats timed on the systolic peak.
     """
     if warmup_samples is None:
         warmup_samples = dart_round(3.0 * fs)
     if tick_every is None:
         tick_every = dart_round(fs)
-    ppg = PpgProcessor(fs)
+    ppg = PpgProcessor(fs, systolic=systolic)
     sqi = SignalQualityIndex(fs)
     res = SessionResult(fs=fs, n=len(ir_na))
     beats = res.beats

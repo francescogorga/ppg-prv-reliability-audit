@@ -37,7 +37,7 @@ HERE = Path(__file__).resolve().parent
 OUT = HERE / "results"
 MAX_REF_REJECT = 0.10     # ECG reference windows with >10% rejected RR are excluded
 BLOCK_S = 600             # bootstrap blocks of 10 min (serial correlation within a person)
-TICK_RUNS = ("app", "systolic", "green")
+TICK_RUNS = ("app", "systolic", "green", "v2")
 
 
 def invert(x):
@@ -56,12 +56,16 @@ def _run(args):
         x, f, gate, parts = invert(p.green), fs, None, True
     elif run == "inloop_0.4":
         x, f, gate, parts = invert(p.ir), fs, 0.4, False
+    elif run == "v2":  # not in the app: light-polarity input, beats timed on the systolic peak
+        x, f, gate, parts = invert(p.ir), fs, None, True
+    elif run == "v2_inloop_0.4":
+        x, f, gate, parts = invert(p.ir), fs, 0.4, False
     elif run == "app_100hz":
         x, f, gate, parts = signal.resample_poly(invert(p.ir), 25, 32), 100.0, None, False
     else:
         raise ValueError(run)
     t = time.time()
-    res = ap.run_session(x, f, gate=gate, record_per_sample=False, tick_parts=parts)
+    res = ap.run_session(x, f, gate=gate, record_per_sample=False, tick_parts=parts, systolic=run.startswith("v2"))
     return pid, run, res, f, time.time() - t
 
 
@@ -69,7 +73,7 @@ def main():
     t_start = time.time()
     OUT.mkdir(exist_ok=True)
     pids = participants()
-    runs = ["app", "systolic", "green", "inloop_0.4", "app_100hz"]
+    runs = ["app", "systolic", "green", "inloop_0.4", "app_100hz", "v2", "v2_inloop_0.4"]
     with Pool() as pool:
         out = pool.map(_run, [(pid, r) for pid in pids for r in runs])
     res = {(pid, r): (s, f, el) for pid, r, s, f, el in out}
@@ -220,6 +224,8 @@ def main():
         dropped_by_sqi_0_4=m_of(kept("app", None, 0) & ~kept("app", "sqi_full", APP_TAU), "rmssd_app"),
         systolic_no_filter=pick("systolic", "sqi_full", 0.0),
         green_no_filter=pick("green", "sqi_full", 0.0),
+        v2_no_filter=pick("v2", "sqi_full", 0.0),
+        v2_in_loop_0_4=m_of(df["rmssd_v2_inloop_0.4"].notna(), "rmssd_v2_inloop_0.4"),
         app_100hz_no_filter=m_of(df["rmssd_app_100hz"].notna(), "rmssd_app_100hz"),
         high_threshold_post_hoc=high,
         bootstrap_median_abs_err=boot,
