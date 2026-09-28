@@ -1,0 +1,6 @@
+run_analysis.py finished 2026-09-28 19:22:04
+elapsed_s=17.9
+python=3.14.3 macOS-26.4.1-arm64-arm-64bit-Mach-O
+numpy=2.5.3 scipy=1.18.1 pandas=3.0.6
+records=66 windows_total=491 windows_with_ref=491
+seed=20260928

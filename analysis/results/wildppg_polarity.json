@@ -1,0 +1,26 @@
+{
+  "an0": {
+    "ir": {
+      "max_after_R_ms": 367.1875,
+      "min_after_R_ms": 0.0,
+      "steepest_pos_over_neg_slope": 0.8085328343365636
+    },
+    "green": {
+      "max_after_R_ms": 320.3125,
+      "min_after_R_ms": 0.0,
+      "steepest_pos_over_neg_slope": 1.7378334549698327
+    }
+  },
+  "e61": {
+    "ir": {
+      "max_after_R_ms": 335.9375,
+      "min_after_R_ms": 62.5,
+      "steepest_pos_over_neg_slope": 1.0421825517529113
+    },
+    "green": {
+      "max_after_R_ms": 273.4375,
+      "min_after_R_ms": 7.8125,
+      "steepest_pos_over_neg_slope": 1.8133887542324896
+    }
+  }
+}

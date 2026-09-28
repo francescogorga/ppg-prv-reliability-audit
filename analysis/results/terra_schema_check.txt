@@ -1,0 +1,40 @@
+# Terra OpenAPI schema check
+repo: https://github.com/tryterra/openapi
+commit: 5944de59e7f2ccb941254c6907d52ebee08d58d8 Mon Sep 28 14:12:38 2026 +0000
+checked_at: 2026-09-28T14:15:24Z
+
+## schemas/core/HeartRateDataSample.yaml -- top-level properties / consts
+  timestamp:
+  bpm:
+  timer_duration_seconds:
+  context:
+
+## schemas/core/HeartRateVariabilityDataSampleRMSSD.yaml -- top-level properties / consts
+  timestamp:
+  hrv_rmssd:
+
+## schemas/core/HeartRateVariabilityDataSampleSDNN.yaml -- top-level properties / consts
+  timestamp:
+  hrv_sdnn:
+
+## schemas/core/RRIntervalSample.yaml -- top-level properties / consts
+  rr_interval_ms:
+  timestamp:
+  hr_bpm:
+
+## schemas/core/HeartRateContext.yaml -- top-level properties / consts
+    const: 0
+    title: Not Set
+    const: 1
+    title: Active
+    const: 2
+    title: Not Active
+
+## files in schemas/ matching quality|confidence|accuracy|reliab|artifact|artefact|sqi (case-insensitive)
+schemas/core/Sleep.yaml
+schemas/core/SleepLevel.yaml
+schemas/core/GlucoseData.yaml
+schemas/core/LabReportArtifactsResponse.yaml
+
+## same grep restricted to heart/hrv/rr/ecg schema files
+(empty above = no match)

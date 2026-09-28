@@ -1,0 +1,39 @@
+{
+  "note": "detector on PTT-PPG ECG resampled to 128 Hz vs manually verified R peaks (tolerance 50 ms)",
+  "records": 66,
+  "sensitivity_median": 1.0,
+  "sensitivity_min": 0.9395604395604396,
+  "ppv_median": 1.0,
+  "ppv_min": 0.936986301369863,
+  "timing_abs_err_ms_median": 1.5689999999892734,
+  "timing_abs_err_ms_p95": 5.3212999999934185,
+  "rmssd_windows": 491,
+  "rmssd_abs_diff_ms_median": 0.18941915798980347,
+  "rmssd_abs_diff_ms_p90": 36.48935581774124,
+  "rmssd_ref_median_ms": 22.32888146254843,
+  "cleaned_detected_vs_manual": {
+    "windows": 491,
+    "abs_diff_ms_median": 0.1878016605815631,
+    "abs_diff_ms_p90": 0.66435514895905,
+    "abs_diff_ms_p99": 25.231767691104523
+  },
+  "cleaned_detected_vs_cleaned_manual": {
+    "windows": 491,
+    "abs_diff_ms_median": 0.18184509978294017,
+    "abs_diff_ms_p90": 0.6176913484315385
+  },
+  "per_activity": {
+    "sit": {
+      "se_median": 1.0,
+      "ppv_median": 1.0
+    },
+    "walk": {
+      "se_median": 1.0,
+      "ppv_median": 1.0
+    },
+    "run": {
+      "se_median": 1.0,
+      "ppv_median": 0.9987017251395519
+    }
+  }
+}

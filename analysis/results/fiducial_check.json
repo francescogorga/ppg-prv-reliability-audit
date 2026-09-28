@@ -1,0 +1,55 @@
+{
+  "inverted": {
+    "run": {
+      "lag_median_ms": 378.9999999999978,
+      "lag_iqr_ms": 25.999999999983828,
+      "beats_missed_pct": 8.231999548931531,
+      "beats_multi_pct": 0.0
+    },
+    "sit": {
+      "lag_median_ms": 404.0000000000106,
+      "lag_iqr_ms": 12.999999999991019,
+      "beats_missed_pct": 0.3382665660584442,
+      "beats_multi_pct": 0.0
+    },
+    "walk": {
+      "lag_median_ms": 364.00000000001853,
+      "lag_iqr_ms": 33.999999999991815,
+      "beats_missed_pct": 15.865773505128915,
+      "beats_multi_pct": 0.5224234129908412
+    },
+    "all": {
+      "lag_median_ms": 384.00000000000745,
+      "lag_iqr_ms": 23.999999999995566,
+      "beats_missed_pct": 4.024951481037625,
+      "beats_multi_pct": 0.0
+    }
+  },
+  "raw_as_app": {
+    "run": {
+      "lag_median_ms": 192.99999999999784,
+      "lag_iqr_ms": 84.99999999997866,
+      "beats_missed_pct": 26.38138195593736,
+      "beats_multi_pct": 2.1601813347159986
+    },
+    "sit": {
+      "lag_median_ms": 172.0000000000006,
+      "lag_iqr_ms": 95.00000000001307,
+      "beats_missed_pct": 14.391182190404296,
+      "beats_multi_pct": 2.811832883554195
+    },
+    "walk": {
+      "lag_median_ms": 217.99999999999642,
+      "lag_iqr_ms": 234.00000000000176,
+      "beats_missed_pct": 30.553314121037463,
+      "beats_multi_pct": 2.4415837217613467
+    },
+    "all": {
+      "lag_median_ms": 192.99999999999073,
+      "lag_iqr_ms": 96.75000000000011,
+      "beats_missed_pct": 25.14810807420301,
+      "beats_multi_pct": 2.2195786400331854
+    }
+  },
+  "note": "medians across records of per-record statistics; beats counted from t >= 10 s"
+}

@@ -1,0 +1,36 @@
+{
+  "an0": {
+    "quiet_windows": 139,
+    "quiet_acc_sd_max_g": 0.022687942296367662,
+    "spectral_hr_abs_err_bpm_median": {
+      "ir": 25.43282707367633,
+      "green": 1.2650672418168085
+    },
+    "spectral_hr_within_5bpm_pct": {
+      "ir": 30.215827338129497,
+      "green": 75.53956834532374
+    },
+    "green_systolic_rmssd_abs_err_ms_median_all": 68.99611167088882,
+    "green_systolic_coverage_all": 0.9538239538239538,
+    "green_systolic_rmssd_abs_err_ms_median_quiet": 62.527705745188435,
+    "app_ir_rmssd_abs_err_ms_median_quiet": 138.5513970690048,
+    "ref_rmssd_median_quiet": 14.847504568081291
+  },
+  "e61": {
+    "quiet_windows": 130,
+    "quiet_acc_sd_max_g": 0.01977198899196632,
+    "spectral_hr_abs_err_bpm_median": {
+      "ir": 38.13788791568646,
+      "green": 2.1762362052533106
+    },
+    "spectral_hr_within_5bpm_pct": {
+      "ir": 4.615384615384616,
+      "green": 56.15384615384615
+    },
+    "green_systolic_rmssd_abs_err_ms_median_all": 62.80527340101749,
+    "green_systolic_coverage_all": 0.9030769230769231,
+    "green_systolic_rmssd_abs_err_ms_median_quiet": 54.14505308475984,
+    "app_ir_rmssd_abs_err_ms_median_quiet": 136.5536027245893,
+    "ref_rmssd_median_quiet": 13.811243506963235
+  }
+}
