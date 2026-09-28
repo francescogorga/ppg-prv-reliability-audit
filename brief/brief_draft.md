@@ -1,6 +1,6 @@
 # Our PPG quality gate did not reduce HRV error: in the lab it never fired, in daily life it discarded data without improving accuracy
 
-*Francesco Gorga, MSc student, Politecnico di Milano. Draft, 28 Sep 2026. Code and data pipeline available on request.*
+*Francesco Gorga, MSc student, Politecnico di Milano. Draft, 28 Sep 2026. Code, results and full method: github.com/francescogorga/ppg-sqi-hrv-audit*
 
 ## Summary
 
