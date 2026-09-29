@@ -1,0 +1,17 @@
+== finger minutes 424 subjects 22
+  v1_app                   cov 100.0% | band agree 0.67 | agree 0.63 kappa 0.28 [0.21,0.36] | FA 0.31 miss 0.26 | MAE 21.51 | n 424 mix {1: 305, 2: 91, 3: 28}
+  v2                       cov 100.0% | band agree 0.75 | agree 0.70 kappa 0.40 [0.29,0.52] | FA 0.25 miss 0.22 | MAE 15.72 | n 424 mix {1: 305, 2: 91, 3: 28}
+  v2_consistency@50%       cov  46.0% | band agree 0.88 | agree 0.84 kappa 0.68 [0.52,0.79] | FA 0.13 miss 0.08 | MAE 6.84 | n 195 mix {1: 136, 2: 44, 3: 15}
+  v2_low_estimate@50%      cov  42.7% | band agree 0.91 | agree 0.87 kappa 0.67 [0.52,0.79] | FA 0.10 miss 0.10 | MAE 6.46 | n 181 mix {1: 139, 2: 34, 3: 8}
+  v2_consistency@25%       cov  19.1% | band agree 0.93 | agree 0.89 kappa 0.79 [0.55,1.00] | FA 0.13 miss 0.00 | MAE 5.54 | n 81 mix {1: 53, 2: 22, 3: 6}
+  v2_low_estimate@25%      cov  21.0% | band agree 0.92 | agree 0.89 kappa 0.61 [0.34,0.89] | FA 0.09 miss 0.23 | MAE 6.48 | n 89 mix {1: 76, 2: 12, 3: 1}
+  conformal {'target': 0.9, 'coverage': 0.9044811320754716, 'width_median': 49.02334036729043, 'confident_share': 0.342688679245283, 'confident_level_matches_ecg_band': 0.9710942876806608, 'confident_kappa': 0.5007608108771413, 'confident_ecg_band_mix': {1: 1393, 2: 49, 3: 11}, 'confident_ppg_band_mix': {1: 1427, 2: 23, 3: 3}, 'all_minutes_ecg_band_mix': {1: 317, 2: 80, 3: 27}, 'always_calm_agreement_on_confident': 0.9587061252580867, 'confident_false_alarm': 0.0021536252692031586, 'confident_miss': 0.6166666666666667, 'note': 'confident = the whole interval lies in one band (<35, 35-65, >=65)'}
+== forehead minutes 10208 subjects 16
+  v1_app                   cov  90.8% | band agree 0.51 | agree 0.50 kappa 0.15 [0.12,0.19] | FA 0.43 miss 0.35 | MAE 26.88 | n 9267 mix {1: 5765, 2: 2206, 3: 1296}
+  v2                       cov 100.0% | band agree 0.47 | agree 0.46 kappa 0.13 [0.08,0.19] | FA 0.51 miss 0.31 | MAE 30.31 | n 10208 mix {1: 6317, 2: 2487, 3: 1404}
+  v2_consistency@50%       cov  34.7% | band agree 0.55 | agree 0.54 kappa 0.23 [0.12,0.33] | FA 0.43 miss 0.23 | MAE 23.63 | n 3545 mix {1: 2297, 2: 779, 3: 469}
+  v2_low_estimate@50%      cov  29.0% | band agree 0.54 | agree 0.52 kappa 0.22 [0.11,0.33] | FA 0.45 miss 0.20 | MAE 24.15 | n 2961 mix {1: 1880, 2: 638, 3: 443}
+  v2_consistency@25%       cov  15.8% | band agree 0.62 | agree 0.60 kappa 0.33 [0.16,0.42] | FA 0.36 miss 0.17 | MAE 19.81 | n 1611 mix {1: 1026, 2: 358, 3: 227}
+  v2_low_estimate@25%      cov  14.2% | band agree 0.61 | agree 0.59 kappa 0.33 [0.13,0.42] | FA 0.39 miss 0.14 | MAE 20.60 | n 1446 mix {1: 906, 2: 319, 3: 221}
+  conformal {'target': 0.9, 'coverage': 0.8997452978056426, 'width_median': 100.0, 'confident_share': 0.23516849529780565, 'confident_level_matches_ecg_band': 0.829834208114638, 'confident_kappa': 0.03027526120103663, 'confident_ecg_band_mix': {1: 19867, 2: 3460, 3: 679}, 'confident_ppg_band_mix': {1: 23914, 3: 92}, 'all_minutes_ecg_band_mix': {1: 6655, 2: 2326, 3: 1227}, 'always_calm_agreement_on_confident': 0.8275847704740481, 'confident_false_alarm': 0.0006040167111290079, 'confident_miss': 0.9806716598212128, 'note': 'confident = the whole interval lies in one band (<35, 35-65, >=65)'}
+.venv/bin/python stress_eval.py  432.86s user 350.44s system 559% cpu 2:19.97 total

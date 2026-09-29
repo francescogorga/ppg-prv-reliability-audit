@@ -32,6 +32,8 @@ e ha dato risultati identici bit per bit (hash SHA-256 in fondo).
 | `explain.py` | Explainability: SHAP sul modello dell'errore, coefficienti della logistica. |
 | `robustness_quality.py`, `fig_tracking.py` | Controlli di robustezza (dentro attività e persona, circolarità, "i valori tenuti seguono la verità?") e figura del brief. |
 | `tests/test_features.py` | 2 test delle feature su segnali sintetici. |
+| `stress.py`, `dart_ref/stress_ref.dart`, `tests/test_stress.py` | Porting dell'indice di stress dell'app (`stress_detector.dart` + ciclo a 1 Hz di `home_page.dart`), verificato contro il Dart originale. |
+| `build_stress.py`, `stress_eval.py`, `fig_brief.py` | Replay dello stress dell'app su dito e fronte; accordo con lo stress "da ECG", filtri, incertezza; figura del brief. |
 | `reproduce.sh` | Rifà tutto da zero. |
 | `results/` | Output (CSV, JSON, figura, log). |
 
@@ -40,7 +42,7 @@ e ha dato risultati identici bit per bit (hash SHA-256 in fondo).
 `tests/test_port.py` confronta il porting con l'output delle classi Dart originali su 5 segnali
 sintetici (100, 64 e 125 Hz; pulito, con artefatti di movimento, sensore staccato), sia con gate SQI
 0,4 sia senza gate. Filtrato (tolleranza 1e-9), picchi (identici), SQI per campione (1e-12), RMSSD a
-1 Hz, numero di intervalli nel buffer e buffer RR finale coincidono. Esito, con gli altri test: **35 passed**
+1 Hz, numero di intervalli nel buffer e buffer RR finale coincidono. Esito, con gli altri test: **39 passed**
 (`results/pytest_output.txt`).
 
 L'ordine delle operazioni per pacchetto (`home_page.dart:151-199`) è una mia trascrizione, perché
@@ -411,7 +413,55 @@ brief `results/fig_tracking.png`). Usano i punteggi leave-one-subject-out appena
 identici. `build_features.py` non contiene elementi casuali; non l'ho rieseguito due volte perché dura
 circa 15 minuti.
 
-## 11. Riprodurre
+## 11. L'errore sull'HRV arriva all'indice di stress? (la continuazione del caso d'uso del corso)
+
+Lo scopo dell'app era un indice di stress da HR e HRV rispetto a una baseline personale. Qui si misura
+quanto l'errore sull'HRV si trasmette a quell'indice.
+
+- **Porting verificato.** `stress.py` riproduce `stress_detector.dart` e l'ordine del ciclo a 1 Hz
+  (`update` solo se SQI ≥ 0,4, poi `compute`). Su tre sequenze sintetiche punteggio e livello
+  coincidono secondo per secondo con il Dart originale (`tests/test_stress.py`).
+- **Replay** (`build_stress.py`). Per ogni secondo si confrontano quattro versioni:
+  - **ECG**: HR (mediana degli ultimi 10 RR) e RMSSD (ultimi 60 RR consecutivi puliti) dall'ECG. È
+    quello che l'app mostrerebbe con battiti perfetti: il riferimento. Non è una misura indipendente
+    di stress;
+  - **app com'è** (v1, filtro SQI nel ciclo);
+  - **v2**;
+  - **v2 con il filtro SQI dell'app**.
+
+  La baseline di 60 s parte a inizio sessione: una sessione per registrazione sul dito, sessioni da
+  30 minuti sulla fronte. Si valutano i minuti dopo la baseline con riferimento ECG affidabile: 424 sul
+  dito, 10.208 sulla fronte.
+- **Valutazione** (`stress_eval.py` → `results/stress_eval.json`, `results/stress_eval_stdout.txt`).
+  - *Metriche*: accordo e kappa di Cohen tra livelli; falsi allarmi = minuti calmi da ECG in cui l'app
+    mostra "agitato" o "stressato"; persi = il contrario.
+  - *Filtri di visualizzazione*: soglia scelta sulle altre persone (leave-one-subject-out) per mostrare
+    il 50% o il 25% dei minuti; se il minuto di baseline non passa la soglia, la sessione non viene
+    mostrata.
+
+| | Minuti mostrati | Kappa (IC 95%) | Falsi allarmi | Persi |
+|---|---|---|---|---|
+| Dito — app com'è | 100% | 0,28 (0,21–0,36) | 31% | 26% |
+| Dito — v2 | 100% | 0,40 (0,29–0,52) | 25% | 22% |
+| Dito — v2 + coerenza battiti, 50% | 46% | 0,68 (0,52–0,79) | 13% | 8% |
+| Dito — v2 + coerenza battiti, 25% | 19% | 0,79 (0,55–1,00) | 13% | 0% |
+| Dito — v2 + "stime più basse", 25% | 21% | 0,61 (0,34–0,89) | 9% | 23% |
+| Fronte — app com'è | 91% | 0,15 (0,12–0,19) | 43% | 35% |
+| Fronte — v2 | 100% | 0,13 (0,08–0,19) | 51% | 31% |
+| Fronte — v2 + coerenza battiti, 25% | 16% | 0,33 (0,16–0,42) | 36% | 17% |
+
+- Sul dito la coerenza dei battiti non migliora l'accordo tenendo solo i minuti facili: tra quelli
+  tenuti al 50% i calmi sono il 70%, contro il 72% del totale. Il filtro "stime più basse" al 25% invece
+  scarta proprio gli episodi di stress (1 minuto "stressato" su 89 tenuti) e ne perde il 23%. Sulla
+  kappa i due filtri non sono distinguibili (IC sovrapposti).
+- **Incertezza** (conformal sul punteggio, 90%, persona di test mai usata). Copertura 90,4% sul dito e
+  90,0% sulla fronte; larghezza mediana 49 punti sul dito e 100 (tutta la scala) sulla fronte. Il
+  livello è "sicuro" (intervallo dentro una fascia) nel 34% e nel 24% dei minuti, ma è quasi sempre
+  "calmo" (98% e 99,6%). Alla fronte l'accordo dei livelli sicuri (83%) è uguale a quello di chi
+  risponde sempre "calmo" (82,8%), con kappa 0,03 e il 98% degli episodi persi. Gli intervalli sono
+  onesti ma non permettono di confermare lo stress.
+
+## 12. Riprodurre
 
 ```bash
 cd analysis
@@ -457,4 +507,12 @@ b5ff68ae0feeab04f437d44e72823184f9a79b7b00b42c98871197c4154f956e  results/qualit
 8bec761f335418e0ff184ee7c9f1b69472dca30fd77f8e3089378612298c6356  results/robustness_quality.json
 20b19b2cf75dea517e9266be47f1d370e1e791b100ac57f2480be9275dbfb7c5  results/conformal.json
 3ab751d8133b598d209db93651c5b3034d05f0c389c024ab67f805de3e1363a5  results/explain.json
+```
+
+Sezione 11 (stress; `stress_eval.json` identico su due esecuzioni, le altre tabelle sono deterministiche):
+
+```
+4aac5823108b2a18f0d70d2c3f7217753595a4e2a3570e636d0b175df937336e  results/stress_finger.csv
+72ab83355ad7cd3affbec9dbb66c2135791e270ab6d10623058563fd0ca20524  results/stress_forehead.csv
+690aef26171442739d51a35449ec10acd072e55176945a03bfa94f49cf7bdaf6  results/stress_eval.json
 ```

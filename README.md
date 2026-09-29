@@ -1,66 +1,67 @@
 # ppg-sqi-hrv-audit
 
-**When can a PPG-derived HRV value be trusted?** A reproducible study, started from a smart-glasses
-prototype app, on two public PPG + ECG datasets: finger in the lab (22 subjects) and forehead in
-daily life (all 16 WildPPG participants).
+**Can a smart-glasses stress index trust its heart-rate variability?** In the *Smart Wearables Design
+and Prototyping* course (Politecnico di Milano) our team built smart glasses with a PPG sensor on the
+nose bridge and a phone app that turns heart rate and HRV (RMSSD) into a stress index. The glasses were
+returned after the exam. This repository continues the work offline, on two public PPG + ECG datasets:
+finger in the lab (22 subjects) and forehead in daily life (all 16 WildPPG participants).
 
-**Short answer.** Judge a quality gate by two things: the error of the windows it keeps, and whether
-the kept HRV still **follows the truth**.
-- **The best gate was simple.** The correlation of each beat with the window's average beat was the best
-  or joint-best gate on both datasets, ahead of the app's signal-quality index (SQI) and on par with ML models.
-- **Some gates only look good.** Keeping the lowest HRV estimates looks excellent on error but keeps
-  values that barely track the ECG. An accelerometer gate mostly detects rest.
-- **At the forehead in daily life, no gate made the values usable.**
+**Short answer.**
+- **Fix beat timing first.** The app timed beats on the diastolic foot of the pulse; its RMSSD was off
+  by 85.5 ms against a true median of 22.3 ms. Timing beats on the systolic peak cut this to 18.1 ms.
+- **Then trust only beat-consistent minutes.** How similar each beat is to the window's average beat was
+  the best of 24 ECG-free quality signals, better than the app's signal-quality index (SQI).
+- **What reaches the stress index.** Compared with the level the app would show from ECG-derived HR/HRV,
+  the app as deployed agreed with kappa 0.28 on the finger, with false alarms in 31% of calm minutes.
+  With fixed timing and a beat-consistency gate, agreement was 0.68 on 46% of minutes. At the forehead in
+  daily life it never exceeded 0.33.
+- **Uncertainty.** Calibrated intervals were honest but could only confirm "calm".
 
 The two-page write-up is [`brief/brief.pdf`](brief/brief.pdf).
 
-![Error of kept windows vs whether kept values follow the ECG](brief/fig_tracking.png)
+![HRV gates and stress-index agreement](brief/fig_brief.png)
 
-| Gate (keeps 50% finger / 25% forehead) | Finger: error | Finger: follows ECG (Spearman) | Forehead: error | Forehead: follows ECG |
-|---|---|---|---|---|
-| No gate | 18.1 ms | 0.08 | 89.2 ms | 0.20 |
-| **Beat-template correlation** | **5.5 ms** | **0.63** (0.15–0.90) | 33.7 ms | **0.50** (0.20–0.70) |
-| Gradient boosting, all 24 features | 5.5 ms | 0.70 | 30.9 ms | 0.44 |
-| Keep lowest HRV estimates | 6.2 ms | 0.52 | 32.2 ms | 0.20 (0.03–0.38) |
-| Accelerometer | 6.0 ms | 0.41 | 81.2 ms | 0.15 |
-| App SQI | 8.3 ms | 0.19 | 58.9 ms | 0.36 |
-| Oracle (needs ECG) | 5.5 ms | 0.82 | 29.4 ms | 0.70 |
+| Stress level shown vs ECG-based level | Minutes shown | Cohen's kappa (95% CI) | False alarms |
+|---|---|---|---|
+| Finger, lab — app as deployed | 100% | 0.28 (0.21–0.36) | 31% |
+| Finger — fixed beat timing | 100% | 0.40 (0.29–0.52) | 25% |
+| Finger — fixed timing + beat-consistency gate | 46% | 0.68 (0.52–0.79) | 13% |
+| Forehead, daily life — app as deployed | 91% | 0.15 (0.12–0.19) | 43% |
+| Forehead — fixed timing + beat-consistency gate | 16% | 0.33 (0.16–0.42) | 36% |
 
-All scores are leave-one-subject-out, with 95% CIs from a bootstrap over subjects. Every number comes
-from a script in `analysis/` whose output is saved in `analysis/results/`; analyses re-run
-bit-identically (hashes in `analysis/README.md`, in Italian).
+The reference is the app's own stress index computed from ECG-derived HR/HRV, i.e. what the app would
+show with perfect beats. It is not an independent stress measure. Every number comes from a script in
+`analysis/` whose output is saved in `analysis/results/`; analyses re-run bit-identically (hashes in
+`analysis/README.md`, in Italian).
 
 ## How the study got here
 
-1. **The app as deployed.** On the finger data its RMSSD error was 85.5 ms against a true median of
-   22.3 ms, and its SQI (threshold 0.4) discarded nothing. See `fig_sqi_tradeoff.png`.
-2. **The ceiling of any gate** (`oracle_check.py`). Even a perfect gate could not rescue the app's beat
-   detector, because only 1.2% of windows were good. The detector timed beats on the diastolic foot.
-3. **v2** (not in the app). Timing beats on the systolic peak cut the finger error to 18.1 ms.
-   `calibrate_sqi.py` then calibrates gate thresholds honestly, on held-out subjects.
-4. **Quality estimation** (`features.py`, `quality_models.py`). 24 ECG-free features, single-feature
-   gates, logistic regression and gradient boosting, all leave-one-subject-out.
-5. **Robustness** (`robustness_quality.py`):
-   - ranking within one activity and within one person;
-   - a no-model "keep lowest estimates" gate, which exposed a circularity at the forehead: there the
-     error is mostly the estimate itself;
-   - the "kept values follow the truth" criterion.
-6. **Uncertainty** (`conformal.py`). Split-conformal intervals whose width adapts to each window reach
-   ~89% coverage against a 90% target, even across sites, but only on average: 3/22 and 3/16 people stay
-   below 80%.
-7. **Explainability** (`explain.py`). SHAP showed the forehead error model relying on the RMSSD estimate
-   itself, which prompted the circularity check.
+1. **The app as deployed** (`run_analysis.py`, `run_wildppg.py`). Large RMSSD error; the SQI (threshold
+   0.4) discarded nothing on finger data.
+2. **Ceiling of any gate** (`oracle_check.py`). Even a perfect gate could not rescue the app's beat
+   detector: only 1.2% of windows were good. The detector timed beats on the diastolic foot.
+3. **v2** (not in the app). Beats timed on the systolic peak; `calibrate_sqi.py` calibrates gate
+   thresholds on held-out subjects.
+4. **Which signal tells when to trust HRV** (`features.py`, `quality_models.py`, `robustness_quality.py`).
+   24 ECG-free features, single features and ML models, all leave-one-subject-out.
+   - Beat-template correlation is the best or joint-best gate, and it works within one activity.
+   - A "keep lowest estimates" rule looks as good on error but its kept values do not follow the ECG.
+     SHAP (`explain.py`) pointed to this circularity.
+5. **What reaches the stress index** (`stress.py`, `build_stress.py`, `stress_eval.py`). The app's stress
+   index, verified against the original Dart, is replayed second by second on both datasets.
+6. **Uncertainty** (`conformal.py`, `stress_eval.py`). Split-conformal intervals keep ~90% coverage on
+   average, but not per person. On the stress score, "confident" levels were almost always "calm": at the
+   forehead they did no better than always answering "calm" (kappa 0.03).
 
 ## What is in this repository
 
 | Path | Content |
 |---|---|
-| `analysis/app_pipeline.py` | Line-by-line Python port of the app's PPG pipeline. The sampling rate is a parameter; `systolic=True` gives v2. |
-| `analysis/tests/` | 35 tests. 27 check equivalence with the original Dart code; the rest cover v2, features and the R-peak detector. |
-| `analysis/run_analysis.py`, `run_wildppg.py` | First analyses of the app's SQI (finger; forehead on 2 participants). |
-| `analysis/oracle_check.py`, `calibrate_sqi.py` | Ceiling of any gate; honest threshold calibration. |
-| `analysis/features.py`, `build_features.py` | ECG-free features per one-minute window. |
-| `analysis/quality_models.py`, `robustness_quality.py`, `fig_tracking.py` | Quality estimation, robustness checks, brief figure. |
+| `analysis/app_pipeline.py`, `analysis/stress.py` | Line-by-line Python ports of the app's PPG pipeline (`systolic=True` gives v2) and stress index. |
+| `analysis/tests/` | 39 tests: equivalence with the original Dart code (pipeline and stress index), v2, features, R-peak detector. |
+| `analysis/run_analysis.py`, `run_wildppg.py`, `oracle_check.py`, `calibrate_sqi.py` | First analyses of the app's SQI; ceiling of any gate; honest threshold calibration. |
+| `analysis/features.py`, `build_features.py`, `quality_models.py`, `robustness_quality.py` | ECG-free quality features, models and robustness checks. |
+| `analysis/build_stress.py`, `stress_eval.py`, `fig_brief.py` | Stress-index replay and evaluation; brief figure. |
 | `analysis/conformal.py`, `explain.py` | Uncertainty (split conformal) and explainability (SHAP). |
 | `analysis/ecg_rpeaks.py`, `validate_rpeaks.py` | R-peak detector for WildPPG, validated on manual annotations. |
 | `analysis/check_terra_schema.sh` | Checks whether a public wearable-API schema has quality fields. |
@@ -82,7 +83,7 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
   which never needs more than ~2.5 GB of free disk at once).
 
 Most analyses only need the saved tables in `analysis/results/`: `quality_models.py`, `robustness_quality.py`,
-`conformal.py`, `explain.py` and `fig_tracking.py` run without downloading any data.
+`conformal.py`, `explain.py`, `stress_eval.py`, `fig_tracking.py` and `fig_brief.py` run without downloading any data.
 
 ## Provenance
 
@@ -114,6 +115,7 @@ The glasses hardware was returned at the end of the course, so no data from the 
 - **Sample size**: 22 finger subjects and 16 forehead participants, so the CIs are wide. The first SQI analysis
   (`run_wildppg.py`) uses only 2 forehead participants; everything in the brief uses all 16.
 - **Polarity**: the polarity of the WildPPG signal is inferred, not documented by its authors.
+- **Stress reference**: the app's own stress index on ECG-derived HR/HRV, not a validated stress measure.
 - **Design choices**: the SQI is an unvalidated heuristic hand-calibrated on the prototype; the 24 features
   are hand-designed; forehead R peaks are detected automatically; v2 is an offline change.
 

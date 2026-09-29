@@ -8,6 +8,7 @@ cd "$(dirname "$0")"
 # and the original app sources next to this folder (team project, not published).
 if command -v dart >/dev/null && [ -d ../smart_wearables_app_stress/lib/processing ]; then
   .venv/bin/python dart_ref/gen_reference.py
+  .venv/bin/python dart_ref/gen_stress_reference.py
 else
   echo "skipping Dart reference regeneration (app sources or Dart SDK not found); using committed dart_ref/out/"
 fi
@@ -25,7 +26,10 @@ fi
 .venv/bin/python conformal.py                           # results/conformal.json, fig_conformal (~5 min)
 .venv/bin/python explain.py                             # results/explain.json, fig_shap
 .venv/bin/python robustness_quality.py > /dev/null      # results/robustness_quality.json
-.venv/bin/python fig_tracking.py                        # results/fig_tracking.{png,pdf} (brief figure)
+.venv/bin/python fig_tracking.py                        # results/fig_tracking.{png,pdf}
+.venv/bin/python build_stress.py all                    # results/stress_{finger,forehead}.csv (~12 min)
+.venv/bin/python stress_eval.py                         # results/stress_eval.json (~4 min)
+.venv/bin/python fig_brief.py                           # results/fig_brief.{png,pdf} (brief figure)
 .venv/bin/python make_figure.py                         # results/fig_sqi_tradeoff.{png,pdf}
 ./check_terra_schema.sh                                 # results/terra_schema_check.txt (network)
 shasum -a 256 results/summary.json results/sweep.csv results/fiducial_check.json \
