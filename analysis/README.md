@@ -30,6 +30,7 @@ e ha dato risultati identici bit per bit (hash SHA-256 in fondo).
 | `quality_models.py` | Quale segnale riconosce meglio i minuti buoni: feature singole, regressione logistica, gradient boosting, oracolo (leave-one-subject-out). |
 | `conformal.py` | Incertezza: intervalli con garanzia di copertura (conformal prediction). |
 | `explain.py` | Explainability: SHAP sul modello dell'errore, coefficienti della logistica. |
+| `robustness_quality.py`, `fig_tracking.py` | Controlli di robustezza (dentro attività e persona, circolarità, "i valori tenuti seguono la verità?") e figura del brief. |
 | `tests/test_features.py` | 2 test delle feature su segnali sintetici. |
 | `reproduce.sh` | Rifà tutto da zero. |
 | `results/` | Output (CSV, JSON, figura, log). |
@@ -373,7 +374,40 @@ allenato su tutti i dati, solo a scopo di spiegazione.
 - La logistica dà lo stesso quadro: sul dito i coefficienti più grandi sono la somiglianza tra battiti,
   alla fronte i salti tra intervalli e i battiti persi.
 
-**Riproducibilità.** `quality_models.py`, `conformal.py` ed `explain.py` rieseguiti due volte: output
+**Controlli di robustezza** (`robustness_quality.py` → `results/robustness_quality.json`; figura del
+brief `results/fig_tracking.png`). Usano i punteggi leave-one-subject-out appena descritti.
+- *Dentro l'attività (dito)*: la somiglianza tra battiti recupera il 98% del guadagno dell'oracolo anche
+  dentro una sola attività (mediana su seduto, cammino e corsa); l'accelerometro solo il 28%. Il suo buon
+  risultato complessivo veniva dal separare "seduto" da "in movimento".
+- *Dentro la persona (fronte)*: gradient boosting 99%, somiglianza tra battiti 80%, SQI 59%, accelerometro 35%.
+- *Circolarità*. L'etichetta è |RMSSD_ppg − RMSSD_ecg|; alla fronte, nel minuto mediano, il 79% della
+  stima è errore (Spearman errore–stima 0,92). Un filtro senza modello che tiene i minuti con la stima più
+  bassa recupera il 96% del guadagno dell'oracolo, quasi come il gradient boosting.
+- *Criterio "i valori tenuti seguono la verità"* (Spearman tra RMSSD PPG ed ECG nei minuti tenuti, IC 95%
+  con bootstrap per persona; si tiene il 50% sul dito e il 25% alla fronte):
+
+| | Dito | Fronte |
+|---|---|---|
+| Nessun filtro | 0,08 (−0,17…0,34) | 0,20 (0,04…0,35) |
+| Somiglianza tra battiti | **0,63** (0,15…0,90) | **0,50** (0,20…0,70) |
+| Quota di battiti scartati | 0,47 | 0,52 (0,26…0,70) |
+| Gradient boosting, tutte le feature | 0,70 (0,29…0,91) | 0,44 (0,19…0,65) |
+| Gradient boosting senza feature derivate dagli RR | 0,61 | 0,43 |
+| Tieni le stime più basse (nessun modello) | 0,52 (0,07…0,70) | **0,20** (0,03…0,38) |
+| Accelerometro | 0,41 | 0,15 |
+| SQI dell'app | 0,19 (−0,18…0,50) | 0,36 (0,16…0,50) |
+| Oracolo | 0,82 | 0,70 |
+
+- Differenza somiglianza tra battiti − "tieni le stime più basse": dito −0,03…0,32 (non significativa),
+  fronte **0,10…0,42**. Differenza somiglianza tra battiti − SQI: dito **0,18…0,71**, fronte −0,07…0,35.
+- PR-AUC per "buono" (≤ 5 ms), più onesta dell'AUROC quando i minuti buoni sono rari: dito somiglianza
+  tra battiti 0,92, SQI 0,34; fronte gradient boosting 0,70, somiglianza tra battiti 0,67, SQI 0,05.
+- **Conseguenza**: alla fronte la quasi perfezione del gradient boosting sulla curva dell'errore era in
+  gran parte circolare. Col criterio "segue la verità" i segnali di coerenza dei battiti sono i migliori.
+  Anche così, i valori tenuti restano circa 3 volte quelli veri (mediana PPG 65 ms contro ECG 22 ms).
+  È stato SHAP (stima RMSSD come feature principale alla fronte) a suggerire questo controllo.
+
+**Riproducibilità.** `quality_models.py`, `conformal.py`, `explain.py` e `robustness_quality.py` rieseguiti due volte: output
 identici. `build_features.py` non contiene elementi casuali; non l'ho rieseguito due volte perché dura
 circa 15 minuti.
 
@@ -420,6 +454,7 @@ Sezione 10 (identici su due esecuzioni; le tabelle delle feature sono le version
 
 ```
 b5ff68ae0feeab04f437d44e72823184f9a79b7b00b42c98871197c4154f956e  results/quality_models.json
+8bec761f335418e0ff184ee7c9f1b69472dca30fd77f8e3089378612298c6356  results/robustness_quality.json
 20b19b2cf75dea517e9266be47f1d370e1e791b100ac57f2480be9275dbfb7c5  results/conformal.json
 3ab751d8133b598d209db93651c5b3034d05f0c389c024ab67f805de3e1363a5  results/explain.json
 ```

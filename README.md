@@ -1,117 +1,72 @@
 # ppg-sqi-hrv-audit
 
-**Does a PPG signal-quality gate reduce HRV error?** A reproducible audit of the signal-processing
-pipeline of a smart-glasses prototype app, on two public PPG + ECG datasets.
+**When can a PPG-derived HRV value be trusted?** A reproducible study, started from a smart-glasses
+prototype app, on two public PPG + ECG datasets: finger in the lab (22 subjects) and forehead in
+daily life (all 16 WildPPG participants).
 
-Short answer: **not as deployed, and not before the beats are timed correctly.**
-- **As deployed**, the app's signal-quality index (SQI) never fired on finger data. At the forehead,
-  in daily life, it discarded 42% of the data without meaningfully reducing the error.
-- **Even a perfect gate** cannot rescue the app's beat detector: with it, only 1% of windows are good.
-- **Timing beats on the systolic peak** cut the finger RMSSD error from 85.5 to 18.1 ms. After that, a
-  gate calibrated on other subjects halves it again: 8.5 ms with the SQI, 6.0 ms with an accelerometer.
-- **At the forehead, in daily life,** nothing worked.
+**Short answer.** Judge a quality gate by two things: the error of the windows it keeps, and whether
+the kept HRV still **follows the truth**.
+- **The best gate was simple.** The correlation of each beat with the window's average beat was the best
+  or joint-best gate on both datasets, ahead of the app's signal-quality index (SQI) and on par with ML models.
+- **Some gates only look good.** Keeping the lowest HRV estimates looks excellent on error but keeps
+  values that barely track the ECG. An accelerometer gate mostly detects rest.
+- **At the forehead in daily life, no gate made the values usable.**
 
-The two-page write-up is in [`brief/brief.pdf`](brief/brief.pdf).
+The two-page write-up is [`brief/brief.pdf`](brief/brief.pdf).
 
-![Oracle vs gates, app pipeline and v2](brief/fig_gates.png)
+![Error of kept windows vs whether kept values follow the ECG](brief/fig_tracking.png)
 
-## Key results
-
-Median absolute RMSSD error against ECG, 60 s windows (95% bootstrap CIs):
-
-| | Windows kept | Median abs. RMSSD error |
-|---|---|---|
-| **Finger, lab** (PTT-PPG, 22 subjects, 491 windows; true RMSSD median 22.3 ms) — app pipeline | 97.8% | 85.5 ms (65.7–101.5) |
-| + SQI ≥ 0.4 (the app's threshold) | 97.8% | 85.5 ms (no change) |
-| Systolic-peak beat timing (offline variant, not in the app) | 97.4% | 18.1 ms (10.0–34.0) |
-| **Forehead, daily life** (WildPPG, 2 participants, 1,343 windows; true median 14.8 ms) — app pipeline | 67.2% | 136.1 ms (128.5–144.0) |
-| + SQI ≥ 0.4 | 39.2% | 130.3 ms (reduction CI −1.6 to 10.5 ms) |
-
-Every number in the brief comes from a script in `analysis/` whose output is saved in
-`analysis/results/`. Both analyses re-run bit-identically; SHA-256 hashes are listed in
-[`analysis/README.md`](analysis/README.md).
-
-## Follow-up: was the gate wrong, or can no gate help?
-
-Two further tests, now also in the brief. Details in `analysis/README.md` §9.
-
-**Test 1: the ceiling.** An oracle keeps the windows with the lowest *true* error. It needs the
-ECG, so it is unreachable, but it shows the best any gate could do.
-- *Finger*: ranked by the app's SQI, the error at half the data is 50.6 ms, against 48.4 ms for the
-  oracle. The ranking was close to the ceiling; the threshold of 0.4 was the problem.
-- *App pipeline*: even a perfect gate cannot help much, because only 1.2% of finger windows and 0% of
-  forehead windows have an error ≤ 5 ms.
-
-**Test 2: honest calibration.** Thresholds are chosen on 11 subjects and tested on the other 11, over
-200 random splits.
-- The pipeline is **v2**: the same app pipeline, with beats timed on the systolic peak (not in the app).
-- Keeping half the data on unseen subjects, the error falls from 18.0 to **8.5 ms** with the SQI, and to
-  **6.0 ms** with an accelerometer gate. The oracle reaches 5.5 ms.
-- At the forehead, thresholds transfer neither between participants nor from the finger.
-
-**Conclusion.** Fix beat timing first. A gate calibrated against a reference then roughly halves the
-error for half the data, and in the lab a plain accelerometer gate does at least as well.
-
-The earlier threshold sweep is in `analysis/results/fig_sqi_tradeoff.png`.
-
-## Which signal best identifies good windows? ML, uncertainty, explainability
-
-Starting from v2, every one-minute window gets 24 features computed **without the ECG**: the app's SQI
-and its parts, beat statistics, beat-to-template correlation, waveform shape and accelerometer. The ECG
-only provides the label (the RMSSD error). The forehead now uses **all 16 WildPPG participants**:
-10,945 windows with a reliable reference.
-
-All scores are leave-one-subject-out. Full tables in `analysis/README.md` §10 (Italian).
-
-| | Finger: AURC (gap closed) | Finger: AUROC | Forehead: AURC (gap closed) | Forehead: AUROC |
+| Gate (keeps 50% finger / 25% forehead) | Finger: error | Finger: follows ECG (Spearman) | Forehead: error | Forehead: follows ECG |
 |---|---|---|---|---|
-| No gate | 18.1 | — | 89.2 | — |
-| Oracle (needs ECG) | 6.9 (100%) | — | 48.8 (100%) | — |
-| Gradient boosting, all features | 7.1 (98%) | 0.96 | **49.6 (98%)** | 0.98 |
-| Beat-template correlation alone | **7.0 (99%)** | 0.97 | 53.3 (89%) | 0.96 |
-| Accelerometer | 8.1 (89%) | 0.88 | 82.8 (16%) | 0.62 |
-| App SQI | 9.4 (78%) | 0.68 | 71.0 (45%) | 0.39 |
+| No gate | 18.1 ms | 0.08 | 89.2 ms | 0.20 |
+| **Beat-template correlation** | **5.5 ms** | **0.63** (0.15–0.90) | 33.7 ms | **0.50** (0.20–0.70) |
+| Gradient boosting, all 24 features | 5.5 ms | 0.70 | 30.9 ms | 0.44 |
+| Keep lowest HRV estimates | 6.2 ms | 0.52 | 32.2 ms | 0.20 (0.03–0.38) |
+| Accelerometer | 6.0 ms | 0.41 | 81.2 ms | 0.15 |
+| App SQI | 8.3 ms | 0.19 | 58.9 ms | 0.36 |
+| Oracle (needs ECG) | 5.5 ms | 0.82 | 29.4 ms | 0.70 |
 
-AURC is the mean median |RMSSD error| (ms) along the error–coverage curve; "gap closed" is the
-share of the distance between no gate and the oracle that a method recovers.
+All scores are leave-one-subject-out, with 95% CIs from a bootstrap over subjects. Every number comes
+from a script in `analysis/` whose output is saved in `analysis/results/`; analyses re-run
+bit-identically (hashes in `analysis/README.md`, in Italian).
 
-- **Finger, lab**: a single interpretable feature, beat-template correlation, nearly matches the
-  oracle. ML adds nothing.
-- **Forehead, daily life**: gradient boosting recovers 98% of the gap. The app SQI is worse than
-  chance at spotting good windows, and the accelerometer does not help.
-- **Transfer**: a model trained only on finger data scores forehead windows almost as well (AURC 49.9
-  vs 49.6). What transfers is the ranking, not a fixed threshold.
-- **Caveats**:
-  - even the oracle keeps 29 ms of error at 25% of forehead data;
-  - on the finger, gated windows have higher true HRV (sitting), so gated HRV over-represents rest.
-- **Uncertainty (split conformal)**: adaptive intervals reach ~89% coverage against a 90% target, also
-  when calibrated on the other site; constant-width intervals drop to 68% from finger to forehead. The
-  guarantee is marginal: 3 of 22 finger subjects and 3 of 16 forehead participants stay below 80%.
-  Forehead intervals are honest but wide (median 223 ms).
-- **Explainability (SHAP)**: finger errors are explained by beat-template correlation; forehead errors
-  by the inflated RMSSD estimate itself and large RR jumps. Dropping the RMSSD feature leaves
-  performance unchanged, so SHAP importance is not necessity.
+## How the study got here
 
-![Quality models](analysis/results/fig_quality_models.png)
+1. **The app as deployed.** On the finger data its RMSSD error was 85.5 ms against a true median of
+   22.3 ms, and its SQI (threshold 0.4) discarded nothing. See `fig_sqi_tradeoff.png`.
+2. **The ceiling of any gate** (`oracle_check.py`). Even a perfect gate could not rescue the app's beat
+   detector, because only 1.2% of windows were good. The detector timed beats on the diastolic foot.
+3. **v2** (not in the app). Timing beats on the systolic peak cut the finger error to 18.1 ms.
+   `calibrate_sqi.py` then calibrates gate thresholds honestly, on held-out subjects.
+4. **Quality estimation** (`features.py`, `quality_models.py`). 24 ECG-free features, single-feature
+   gates, logistic regression and gradient boosting, all leave-one-subject-out.
+5. **Robustness** (`robustness_quality.py`):
+   - ranking within one activity and within one person;
+   - a no-model "keep lowest estimates" gate, which exposed a circularity at the forehead: there the
+     error is mostly the estimate itself;
+   - the "kept values follow the truth" criterion.
+6. **Uncertainty** (`conformal.py`). Split-conformal intervals whose width adapts to each window reach
+   ~89% coverage against a 90% target, even across sites, but only on average: 3/22 and 3/16 people stay
+   below 80%.
+7. **Explainability** (`explain.py`). SHAP showed the forehead error model relying on the RMSSD estimate
+   itself, which prompted the circularity check.
 
 ## What is in this repository
 
 | Path | Content |
 |---|---|
-| `analysis/app_pipeline.py` | Line-by-line Python port of the app's PPG pipeline: band-pass filter, peak detector, RR acceptance, RMSSD and SQI. The sampling rate is a parameter. |
-| `analysis/tests/` | 35 tests. 27 check equivalence with the original Dart code (see Provenance); the rest cover the ECG R-peak detector, options and v2. |
-| `analysis/run_analysis.py` | Finger analysis (PhysioNet PTT-PPG). |
-| `analysis/run_wildppg.py`, `analysis/wildppg_channel_check.py` | Forehead analysis (WildPPG). |
-| `analysis/ecg_rpeaks.py`, `analysis/validate_rpeaks.py` | R-peak detector for WildPPG, validated against manual annotations. |
-| `analysis/fiducial_check.py` | Where the detected PPG beats fall relative to the ECG R wave. |
-| `analysis/oracle_check.py`, `analysis/calibrate_sqi.py` | Follow-up tests 1 and 2. |
-| `analysis/features.py`, `analysis/build_features.py`, `analysis/quality_models.py`, `analysis/conformal.py`, `analysis/explain.py` | Quality estimation: features, models, conformal intervals, SHAP. |
+| `analysis/app_pipeline.py` | Line-by-line Python port of the app's PPG pipeline. The sampling rate is a parameter; `systolic=True` gives v2. |
+| `analysis/tests/` | 35 tests. 27 check equivalence with the original Dart code; the rest cover v2, features and the R-peak detector. |
+| `analysis/run_analysis.py`, `run_wildppg.py` | First analyses of the app's SQI (finger; forehead on 2 participants). |
+| `analysis/oracle_check.py`, `calibrate_sqi.py` | Ceiling of any gate; honest threshold calibration. |
+| `analysis/features.py`, `build_features.py` | ECG-free features per one-minute window. |
+| `analysis/quality_models.py`, `robustness_quality.py`, `fig_tracking.py` | Quality estimation, robustness checks, brief figure. |
+| `analysis/conformal.py`, `explain.py` | Uncertainty (split conformal) and explainability (SHAP). |
+| `analysis/ecg_rpeaks.py`, `validate_rpeaks.py` | R-peak detector for WildPPG, validated on manual annotations. |
 | `analysis/check_terra_schema.sh` | Checks whether a public wearable-API schema has quality fields. |
-| `analysis/results/` | All outputs: JSON, CSV, figure. |
+| `analysis/results/` | All outputs (JSON, CSV, figures). |
 | `brief/` | The brief (Markdown and PDF) and the script that builds the PDF. |
-| `docs/PIPELINE_ATTUALE.md` | Detailed description of the app pipeline, with file:line references to the original app (in Italian). |
-
-`analysis/README.md` has the full method, all results and the dataset choice. It is in Italian.
+| `docs/PIPELINE_ATTUALE.md` | Detailed description of the app pipeline (in Italian). |
 
 ## Reproduce
 
@@ -123,10 +78,11 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 
 `reproduce.sh`:
 - downloads PTT-PPG (~410 MB, SHA-256 verified) and all 16 WildPPG participants (~19.6 GB transfer, one file at a time, raw files deleted after extraction);
-- runs the tests and both analyses;
-- rebuilds the figure.
+- runs the tests and every analysis, and rebuilds every figure (about 3 h, mostly the WildPPG download,
+  which never needs more than ~2.5 GB of free disk at once).
 
-`./download_wildppg.sh all` fetches all 16 WildPPG participants (19.6 GB).
+Most analyses only need the saved tables in `analysis/results/`: `quality_models.py`, `robustness_quality.py`,
+`conformal.py`, `explain.py` and `fig_tracking.py` run without downloading any data.
 
 ## Provenance
 
@@ -155,9 +111,10 @@ The glasses hardware was returned at the end of the course, so no data from the 
 ## Limitations
 
 - **No data from the glasses**: neither dataset is recorded at the nose bridge.
-- **Forehead sample**: the brief and the first analyses use 2 of 16 WildPPG participants; the quality-model
-  section uses all 16.
+- **Sample size**: 22 finger subjects and 16 forehead participants, so the CIs are wide. The first SQI analysis
+  (`run_wildppg.py`) uses only 2 forehead participants; everything in the brief uses all 16.
 - **Polarity**: the polarity of the WildPPG signal is inferred, not documented by its authors.
-- **The SQI** is an unvalidated heuristic hand-calibrated on the prototype.
+- **Design choices**: the SQI is an unvalidated heuristic hand-calibrated on the prototype; the 24 features
+  are hand-designed; forehead R peaks are detected automatically; v2 is an offline change.
 
 Details in the brief and in `analysis/README.md`.
