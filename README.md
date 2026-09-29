@@ -54,17 +54,58 @@ error for half the data, and in the lab a plain accelerometer gate does at least
 
 The earlier threshold sweep is in `analysis/results/fig_sqi_tradeoff.png`.
 
+## Which signal best identifies good windows? ML, uncertainty, explainability
+
+Starting from v2, every one-minute window gets 24 features computed **without the ECG**: the app's SQI
+and its parts, beat statistics, beat-to-template correlation, waveform shape and accelerometer. The ECG
+only provides the label (the RMSSD error). The forehead now uses **all 16 WildPPG participants**:
+10,945 windows with a reliable reference.
+
+All scores are leave-one-subject-out. Full tables in `analysis/README.md` §10 (Italian).
+
+| | Finger: AURC (gap closed) | Finger: AUROC | Forehead: AURC (gap closed) | Forehead: AUROC |
+|---|---|---|---|---|
+| No gate | 18.1 | — | 89.2 | — |
+| Oracle (needs ECG) | 6.9 (100%) | — | 48.8 (100%) | — |
+| Gradient boosting, all features | 7.1 (98%) | 0.96 | **49.6 (98%)** | 0.98 |
+| Beat-template correlation alone | **7.0 (99%)** | 0.97 | 53.3 (89%) | 0.96 |
+| Accelerometer | 8.1 (89%) | 0.88 | 82.8 (16%) | 0.62 |
+| App SQI | 9.4 (78%) | 0.68 | 71.0 (45%) | 0.39 |
+
+AURC is the mean median |RMSSD error| (ms) along the error–coverage curve; "gap closed" is the
+share of the distance between no gate and the oracle that a method recovers.
+
+- **Finger, lab**: a single interpretable feature, beat-template correlation, nearly matches the
+  oracle. ML adds nothing.
+- **Forehead, daily life**: gradient boosting recovers 98% of the gap. The app SQI is worse than
+  chance at spotting good windows, and the accelerometer does not help.
+- **Transfer**: a model trained only on finger data scores forehead windows almost as well (AURC 49.9
+  vs 49.6). What transfers is the ranking, not a fixed threshold.
+- **Caveats**:
+  - even the oracle keeps 29 ms of error at 25% of forehead data;
+  - on the finger, gated windows have higher true HRV (sitting), so gated HRV over-represents rest.
+- **Uncertainty (split conformal)**: adaptive intervals reach ~89% coverage against a 90% target, also
+  when calibrated on the other site; constant-width intervals drop to 68% from finger to forehead. The
+  guarantee is marginal: 3 of 22 finger subjects and 3 of 16 forehead participants stay below 80%.
+  Forehead intervals are honest but wide (median 223 ms).
+- **Explainability (SHAP)**: finger errors are explained by beat-template correlation; forehead errors
+  by the inflated RMSSD estimate itself and large RR jumps. Dropping the RMSSD feature leaves
+  performance unchanged, so SHAP importance is not necessity.
+
+![Quality models](analysis/results/fig_quality_models.png)
+
 ## What is in this repository
 
 | Path | Content |
 |---|---|
 | `analysis/app_pipeline.py` | Line-by-line Python port of the app's PPG pipeline: band-pass filter, peak detector, RR acceptance, RMSSD and SQI. The sampling rate is a parameter. |
-| `analysis/tests/` | 33 tests. 27 check equivalence with the original Dart code (see Provenance); the rest cover the ECG R-peak detector, options and v2. |
+| `analysis/tests/` | 35 tests. 27 check equivalence with the original Dart code (see Provenance); the rest cover the ECG R-peak detector, options and v2. |
 | `analysis/run_analysis.py` | Finger analysis (PhysioNet PTT-PPG). |
 | `analysis/run_wildppg.py`, `analysis/wildppg_channel_check.py` | Forehead analysis (WildPPG). |
 | `analysis/ecg_rpeaks.py`, `analysis/validate_rpeaks.py` | R-peak detector for WildPPG, validated against manual annotations. |
 | `analysis/fiducial_check.py` | Where the detected PPG beats fall relative to the ECG R wave. |
 | `analysis/oracle_check.py`, `analysis/calibrate_sqi.py` | Follow-up tests 1 and 2. |
+| `analysis/features.py`, `analysis/build_features.py`, `analysis/quality_models.py`, `analysis/conformal.py`, `analysis/explain.py` | Quality estimation: features, models, conformal intervals, SHAP. |
 | `analysis/check_terra_schema.sh` | Checks whether a public wearable-API schema has quality fields. |
 | `analysis/results/` | All outputs: JSON, CSV, figure. |
 | `brief/` | The brief (Markdown and PDF) and the script that builds the PDF. |
@@ -81,7 +122,7 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 ```
 
 `reproduce.sh`:
-- downloads PTT-PPG (~410 MB, SHA-256 verified) and 2 WildPPG participants (~2.2 GB transfer, raw files deleted after extraction);
+- downloads PTT-PPG (~410 MB, SHA-256 verified) and all 16 WildPPG participants (~19.6 GB transfer, one file at a time, raw files deleted after extraction);
 - runs the tests and both analyses;
 - rebuilds the figure.
 
@@ -107,14 +148,15 @@ The glasses hardware was returned at the end of the course, so no data from the 
   PhysioNet, 2022, https://doi.org/10.13026/jpan-6n92 — Open Data Commons ODbL 1.0.
 - **WildPPG**: Meier M., Demirel B. U., Holz C. *WildPPG: A Real-World PPG Dataset of Long Continuous
   Recordings*, NeurIPS 2024 Datasets and Benchmarks — CC BY-NC-SA 4.0 (non-commercial).
-  `analysis/results/wildppg_*` are derived from WildPPG and are shared under the same licence.
+  Forehead-derived results (`analysis/results/wildppg_*`, `features_forehead.csv`, `oof_scores_forehead.csv`)
+  are shared under the same licence.
 - Neither dataset is redistributed here; the scripts download them from the original sources.
 
 ## Limitations
 
 - **No data from the glasses**: neither dataset is recorded at the nose bridge.
-- **Forehead sample**: only 2 of 16 WildPPG participants. The CIs describe variation within these two
-  people, not between people.
+- **Forehead sample**: the brief and the first analyses use 2 of 16 WildPPG participants; the quality-model
+  section uses all 16.
 - **Polarity**: the polarity of the WildPPG signal is inferred, not documented by its authors.
 - **The SQI** is an unvalidated heuristic hand-calibrated on the prototype.
 

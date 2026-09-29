@@ -26,6 +26,11 @@ e ha dato risultati identici bit per bit (hash SHA-256 in fondo).
 | `oracle_check.py` | Prova 1: il limite massimo di un filtro qualsiasi (oracolo che conosce l'errore vero). |
 | `calibrate_sqi.py` | Prova 2: soglie tarate su una parte delle persone e misurate sulle altre. |
 | `tests/test_v2.py` | 3 test della v2 (battito sul picco sistolico). |
+| `features.py`, `build_features.py` | Feature per minuto senza ECG (SQI e sue parti, battiti, somiglianza tra battiti, forma d'onda, accelerometro) e tabella con l'etichetta. |
+| `quality_models.py` | Quale segnale riconosce meglio i minuti buoni: feature singole, regressione logistica, gradient boosting, oracolo (leave-one-subject-out). |
+| `conformal.py` | Incertezza: intervalli con garanzia di copertura (conformal prediction). |
+| `explain.py` | Explainability: SHAP sul modello dell'errore, coefficienti della logistica. |
+| `tests/test_features.py` | 2 test delle feature su segnali sintetici. |
 | `reproduce.sh` | Rifà tutto da zero. |
 | `results/` | Output (CSV, JSON, figura, log). |
 
@@ -34,7 +39,7 @@ e ha dato risultati identici bit per bit (hash SHA-256 in fondo).
 `tests/test_port.py` confronta il porting con l'output delle classi Dart originali su 5 segnali
 sintetici (100, 64 e 125 Hz; pulito, con artefatti di movimento, sensore staccato), sia con gate SQI
 0,4 sia senza gate. Filtrato (tolleranza 1e-9), picchi (identici), SQI per campione (1e-12), RMSSD a
-1 Hz, numero di intervalli nel buffer e buffer RR finale coincidono. Esito, con gli altri test: **33 passed**
+1 Hz, numero di intervalli nel buffer e buffer RR finale coincidono. Esito, con gli altri test: **35 passed**
 (`results/pytest_output.txt`).
 
 L'ordine delle operazioni per pacchetto (`home_page.dart:151-199`) è una mia trascrizione, perché
@@ -284,7 +289,95 @@ Prima va corretto il punto in cui si colloca il battito. Dopo, un filtro tarato 
 dimezza l'errore al prezzo di metà dei dati, e in laboratorio un semplice accelerometro fa almeno
 altrettanto bene. Alla fronte, nella vita reale, nessun filtro basta con questi dati.
 
-## 10. Riprodurre
+## 10. Quale segnale riconosce meglio i minuti buoni? ML, incertezza, explainability
+
+Si parte dalla v2. Per ogni minuto si calcolano 24 feature **senza ECG** (`features.py`):
+- l'SQI dell'app e le sue parti;
+- statistiche sui battiti: trovati, scartati, stima dei persi, salti tra intervalli;
+- somiglianza di ogni battito al battito medio (correlazione col template);
+- forma d'onda: skewness, curtosi, purezza spettrale;
+- accelerometro.
+
+L'ECG serve solo per l'etichetta, cioè l'errore RMSSD del minuto; "buono" = errore ≤ 5 ms.
+La fronte ora usa **tutti i 16 partecipanti** di WildPPG, scaricati e cancellati un file alla volta:
+12.998 minuti, 10.945 con riferimento ECG affidabile. Con la v1 l'errore mediano è 106,1 ms, con la v2
+89,2 ms (RMSSD vero mediano 21,3 ms); i minuti buoni con la v2 sono il 3,2%.
+
+**Valutazione.** Leave-one-subject-out: il punteggio di ogni persona viene da un modello allenato
+sulle altre. Per le feature singole anche la direzione (più alto = meglio o peggio) è scelta sulle
+altre persone. Le metriche sono:
+- **AURC**, la media dell'errore mediano sulla curva errore–dati tenuti (10–100%): più basso è meglio;
+- **gap chiuso**, cioè quanto della distanza tra "nessun filtro" e oracolo viene recuperata;
+- **AUROC** su "buono".
+
+Gli IC sono calcolati con bootstrap per persona. Risultati in `results/quality_models.json` e
+`results/fig_quality_models.png`.
+
+| | Dito: AURC (gap chiuso) | Dito: errore al 50% | Dito: AUROC | Fronte: AURC (gap chiuso) | Fronte: errore al 25% | Fronte: AUROC |
+|---|---|---|---|---|---|---|
+| Nessun filtro | 18,1 | 18,1 | — | 89,2 | 89,2 | — |
+| Oracolo (serve l'ECG) | 6,9 (100%) | 5,5 | — | 48,8 (100%) | 29,4 | — |
+| Gradient boosting, tutte le feature | 7,1 (98%) | 5,5 | 0,96 | **49,6 (98%)** | 30,9 | 0,98 |
+| Regressione logistica | 7,2 (97%) | 5,7 | 0,94 | 51,8 (92%) | 32,5 | 0,97 |
+| Somiglianza tra battiti (da sola) | **7,0 (99%)** | 5,5 | 0,97 | 53,3 (89%) | 33,7 | 0,96 |
+| Quota di battiti scartati | 7,4 (96%) | 5,6 | 0,90 | 53,4 (89%) | 34,9 | 0,95 |
+| Accelerometro | 8,1 (89%) | 6,0 | 0,88 | 82,8 (16%) | 81,2 | 0,62 |
+| **SQI dell'app** | 9,4 (78%) | 8,3 | 0,68 | 71,0 (45%) | 58,9 | **0,39** |
+
+- Sul dito basta **una feature**, la somiglianza tra battiti, per arrivare quasi all'oracolo; il
+  vantaggio sull'SQI è significativo (AURC, IC del miglioramento +1,2…+4,5 ms). I modelli di ML non
+  aggiungono nulla.
+- Alla fronte, nella vita reale, il **gradient boosting** è il migliore (98% del gap; miglioramento
+  sull'SQI +10,0…+33,7 ms). L'SQI dell'app ha AUROC 0,39, peggio del caso. L'accelerometro, utile in
+  laboratorio, qui non serve.
+- **Trasferimento tra siti**: allenato solo sul dito e applicato alla fronte, il gradient boosting ha
+  AURC 49,9 (contro 49,6 allenato sulla fronte); al contrario 7,1 (contro 7,1). Conta la
+  **classifica**, non una soglia fissa, ed è per questo che si trasferisce.
+- **Limite dei dati**: alla fronte anche l'oracolo, tenendo un quarto dei minuti, ha un errore
+  mediano di 29 ms.
+- **Bias di selezione**: sul dito i minuti tenuti al 50% hanno HRV vera più alta (25,8 contro 19,6 ms
+  per la somiglianza tra battiti, 26,5 contro 19,1 anche per l'oracolo), perché sono quelli da seduti.
+  Una HRV filtrata va interpretata sapendo che rappresenta di più il riposo. Alla fronte l'effetto è
+  piccolo (20,7 contro 23,4 ms).
+
+**Incertezza: conformal prediction** (`results/conformal.json`, `results/fig_conformal.png`). Per ogni
+minuto si costruisce l'intervallo RMSSD ± q·σ(x), con σ(x) = errore previsto dal gradient boosting
++ 1 ms (intervallo *adattivo*), confrontato con un intervallo a larghezza fissa. Obiettivo: copertura
+del 90%. Il modello è allenato su 2/3 delle altre persone e tarato sul restante terzo; la persona di
+test non viene mai usata (20 ripetizioni).
+
+| | Dito | Fronte |
+|---|---|---|
+| Copertura complessiva, adattivo / fisso | 89,4% / 88,0% | 89,3% / 89,3% |
+| Larghezza mediana, adattivo / fisso | 58 / 263 ms | 223 / 341 ms |
+| Persone con copertura < 80%, adattivo / fisso | 3 su 22 (min 45%) / 6 su 22 | 3 su 16 (min 63%) / 2 su 16 |
+| Solo intervalli ≤ 20 ms: minuti tenuti, errore, copertura | 24,9%, 3,3 ms, 83% | 2,6%, 3,4 ms, 88% |
+| Tarato sull'altro sito, adattivo / fisso | 89,1% / 96,2% | 89,5% / **68,1%** |
+
+- La garanzia **in media** regge, anche cambiando sito, ma solo con l'intervallo adattivo: quello fisso,
+  tarato sul dito e usato sulla fronte, scende al 68%.
+- **Per singola persona** non è garantita: alcune restano sotto l'80%.
+- Gli intervalli stretti coprono meno del 90%: garanzia marginale ≠ garanzia condizionale.
+- Alla fronte gli intervalli sono onesti ma molto larghi (mediana 223 ms su un RMSSD di 21 ms):
+  l'incertezza è reale, non un difetto del metodo.
+
+**Explainability: SHAP** (`results/explain.json`, `results/fig_shap.png`). È il modello dell'errore
+allenato su tutti i dati, solo a scopo di spiegazione.
+- *Dito*: domina la somiglianza tra battiti (|SHAP| medio 0,66), poi la stima RMSSD stessa (0,25),
+  l'energia dell'accelerometro a 1–5 Hz e i salti tra intervalli.
+- *Fronte*: domina la stima RMSSD (0,43; più è alta, più il modello prevede errore, perché gli errori
+  gonfiano l'RMSSD), poi il salto massimo tra intervalli (0,19) e la somiglianza tra battiti.
+- *Importanza ≠ necessità*: senza la stima RMSSD il modello ottiene la stessa AURC (49,7 contro 49,6
+  alla fronte, 7,1 contro 7,1 sul dito), perché l'informazione c'è anche nei salti tra intervalli. SHAP
+  distribuisce il merito tra feature correlate.
+- La logistica dà lo stesso quadro: sul dito i coefficienti più grandi sono la somiglianza tra battiti,
+  alla fronte i salti tra intervalli e i battiti persi.
+
+**Riproducibilità.** `quality_models.py`, `conformal.py` ed `explain.py` rieseguiti due volte: output
+identici. `build_features.py` non contiene elementi casuali; non l'ho rieseguito due volte perché dura
+circa 15 minuti.
+
+## 11. Riprodurre
 
 ```bash
 cd analysis
@@ -321,4 +414,12 @@ d7ee80ad8c4828990ee720aa8c01ade15ad91b35f876ab87be44b472424ea76e  results/wildpp
 c7c36aabfd3b416dd4f65ad3fb3b4aefb6dc12fd26cba42f3caf487c99cee6a9  results/wildppg_sweep.csv
 0788494a683c284bcae563b84773e14e17f0be741ef30a23912506ca3d0cfa31  results/oracle_check.json
 bfb3d2b6af0198315bffa69950bdaa828f4ff7f7f29e63cf6491d7c3a1ac77a3  results/sqi_calibration.json
+```
+
+Sezione 10 (identici su due esecuzioni; le tabelle delle feature sono le versioni usate):
+
+```
+b5ff68ae0feeab04f437d44e72823184f9a79b7b00b42c98871197c4154f956e  results/quality_models.json
+20b19b2cf75dea517e9266be47f1d370e1e791b100ac57f2480be9275dbfb7c5  results/conformal.json
+3ab751d8133b598d209db93651c5b3034d05f0c389c024ab67f805de3e1363a5  results/explain.json
 ```

@@ -15,11 +15,15 @@ fi
 .venv/bin/python run_analysis.py                        # results/windows.csv, sweep.csv, summary.json
 .venv/bin/python fiducial_check.py > /dev/null          # results/fiducial_check.{csv,json}
 .venv/bin/python validate_rpeaks.py > /dev/null         # results/rpeak_validation.json (R detector vs manual peaks)
-./download_wildppg.sh an0 e61                           # ~2.2 GB transfer, raw deleted after extraction
+./download_wildppg.sh all                               # 16 files, ~19.6 GB transfer one at a time; raw deleted after extraction
 .venv/bin/python run_wildppg.py                         # results/wildppg_*.{csv,json}
 .venv/bin/python wildppg_channel_check.py > /dev/null   # results/wildppg_channel_check.json
 .venv/bin/python oracle_check.py > /dev/null            # results/oracle_check.json, fig_oracle.{png,pdf}
 .venv/bin/python calibrate_sqi.py                       # results/sqi_calibration.json
+.venv/bin/python build_features.py all                  # results/features_{finger,forehead}.csv (~15 min)
+.venv/bin/python quality_models.py                      # results/quality_models.json, fig_quality_models
+.venv/bin/python conformal.py                           # results/conformal.json, fig_conformal (~5 min)
+.venv/bin/python explain.py                             # results/explain.json, fig_shap
 .venv/bin/python make_figure.py                         # results/fig_sqi_tradeoff.{png,pdf}
 ./check_terra_schema.sh                                 # results/terra_schema_check.txt (network)
 shasum -a 256 results/summary.json results/sweep.csv results/fiducial_check.json \
