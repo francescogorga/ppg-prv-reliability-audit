@@ -269,7 +269,7 @@ analysis/.venv/bin/python -m pip install --dry-run --ignore-installed --only-bin
   resolution evidence, not an executed Linux test suite.
 - CI: YAML parses; push/PR triggers and test path checked. No local GitHub Actions runner was used.
   After the review commit was pushed, the GitHub Actions unit-test workflow passed
-  ([run 36692343691](https://github.com/francescogorga/ppg-sqi-hrv-audit/actions/runs/36692343691)).
+  ([run 36692343691](https://github.com/francescogorga/ppg-prv-reliability-audit/actions/runs/36692343691)).
 - All five dependent analysis scripts and both figure scripts completed with exit code 0.
 - Numerical checker: all eight generated result blocks, historical table cells, headline values,
   CSV-derived medians, corrected count proxies and schema revision passed.

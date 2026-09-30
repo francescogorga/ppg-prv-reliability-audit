@@ -1,6 +1,6 @@
 # Can a smart-glasses stress index trust PPG-derived HRV?
 
-[![tests](https://github.com/francescogorga/ppg-sqi-hrv-audit/actions/workflows/tests.yml/badge.svg)](https://github.com/francescogorga/ppg-sqi-hrv-audit/actions/workflows/tests.yml)
+[![tests](https://github.com/francescogorga/ppg-prv-reliability-audit/actions/workflows/tests.yml/badge.svg)](https://github.com/francescogorga/ppg-prv-reliability-audit/actions/workflows/tests.yml)
 
 Our university team built smart glasses with a nose-bridge PPG sensor and an app that converts
 heart rate and HRV (RMSSD) into a personal-baseline stress index. After returning the hardware,

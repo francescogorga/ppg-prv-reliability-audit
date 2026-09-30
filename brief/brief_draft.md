@@ -2,7 +2,7 @@
 
 *Francesco Gorga · MSc student, Politecnico di Milano · 29 Sep 2026*
 
-*Code, results and methods: [github.com/francescogorga/ppg-sqi-hrv-audit](https://github.com/francescogorga/ppg-sqi-hrv-audit)*
+*Code, results and methods: [github.com/francescogorga/ppg-prv-reliability-audit](https://github.com/francescogorga/ppg-prv-reliability-audit)*
 
 ## Problem and origin
 
