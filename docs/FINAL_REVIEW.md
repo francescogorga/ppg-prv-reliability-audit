@@ -1,12 +1,13 @@
-# Final local review for Terra
+# Final review record for Terra
 
-Review branch: `review/terra-final-polish`. Base: `main`, commit `1921f37`.
-The initial target checkout was clean. The adjacent university `Project` repository was not edited.
-No commits, pushes, merges, pull requests or history rewrites were made during this review.
+The review was developed on `review/terra-final-polish` from `main` at `1921f37` and committed as
+`1dcbeaf`. It was pushed to GitHub, and the remote unit-test workflow passed. The adjacent
+university `Project` repository was not edited. This document records the review and its local
+verification; the commands, file list and diff below describe that review snapshot.
 
 ## A. Executive assessment
 
-The repository is ready for the author's final inspection before an external technical review.
+The reviewed repository is prepared for an external technical review.
 The contribution is now framed as measurement reliability, quality selection, downstream consequences,
 uncertainty and limitations. It is not publication-grade validation or evidence that the glasses measure
 stress reliably. The negative free-living forehead result remains prominent.
@@ -158,7 +159,7 @@ clear that waveform template consistency cannot be recovered from summary biomar
 
 ## G. Files changed
 
-All files are local and unstaged. No files were deleted.
+The following files were added or modified by the review commit. No files were deleted.
 
 - `.github/workflows/tests.yml` (new)
 - `README.md` (modified)
@@ -266,8 +267,9 @@ analysis/.venv/bin/python -m pip install --dry-run --ignore-installed --only-bin
 - `pip check`: **No broken requirements found**.
 - Linux dependency dry run: all pinned requirements resolved to binary distributions. This is
   resolution evidence, not an executed Linux test suite.
-- CI: YAML parses; push/PR triggers and test path checked. No local GitHub Actions runner was used,
-  and no workflow was dispatched. The badge is a normal workflow-status URL, not a claimed pass.
+- CI: YAML parses; push/PR triggers and test path checked. No local GitHub Actions runner was used.
+  After the review commit was pushed, the GitHub Actions unit-test workflow passed
+  ([run 36692343691](https://github.com/francescogorga/ppg-sqi-hrv-audit/actions/runs/36692343691)).
 - All five dependent analysis scripts and both figure scripts completed with exit code 0.
 - Numerical checker: all eight generated result blocks, historical table cells, headline values,
   CSV-derived medians, corrected count proxies and schema revision passed.
@@ -279,8 +281,8 @@ analysis/.venv/bin/python -m pip install --dry-run --ignore-installed --only-bin
   clipping, table fit, URLs and readable labels. Figure caption was shortened/wrapped after inspection.
 - Shell syntax, local Markdown links and `git diff --check` passed.
 
-Not executed: full `reproduce.sh`, raw dataset downloads, fresh Dart reference generation, new glasses
-recordings, independent third-dataset validation, remote CI, push/merge/PR operations. The saved artifacts
+Not executed during the review: full `reproduce.sh`, raw dataset downloads, fresh Dart reference
+generation, new glasses recordings and independent third-dataset validation. The saved artifacts
 are evidence of the executed cached-table reruns, not a claim that the entire acquisition pipeline was rerun.
 
 ## J. Diff summary
@@ -339,19 +341,18 @@ hashes remain labelled as historical in the technical README.
  45 files changed, 26370 insertions(+), 26155 deletions(-)
 ```
 
-The stat above covers tracked working-tree changes against `main`. New files are listed separately in
-section G because an unstaged `git diff --stat` does not include untracked files.
+The stat above is the historical tracked-file diff against `main` at `1921f37`. Files newly added
+in that review are listed in section G; they were absent from the unstaged diff captured then.
 
-## K. Remaining concerns before sending
+## K. Remaining research limitations
 
-**Blocking:** no failing local test/build or unresolved inconsistency found in the reviewed outputs.
-The author still needs to approve the uncommitted diff and claims before any publication action.
+No failing local test/build or unresolved inconsistency was found in the reviewed outputs.
 
 **Important:** no glasses recordings; no direct manual WildPPG ECG validation; exploratory feature selection
 on both datasets; small cohorts and conditional bootstrap uncertainty; approximate rejection count proxy;
 non-causal reference cleaning and retrospective display gates; stress algorithm not validated against stress
 labels; confident score bands not equivalent to hysteretic levels; poor absolute forehead performance;
-no executed remote CI/full raw-data rerun; no independently regenerable Dart fixtures without app source.
+no full raw-data rerun; no independently regenerable Dart fixtures without app source.
 These limits prevent publication-grade or clinical reliability claims.
 
 **Nice to improve:** freeze transitive dependencies and environment metadata for a future release; obtain
@@ -418,12 +419,12 @@ fresh glasses data once hardware and raw export are available. None requires add
     whether it improves downstream reliability. Next, freeze the method before a third-dataset test, then
     separately study stress validity using protocol labels and eventually real glasses recordings.
 
-## M. Suggested next action
+## M. Reading guide
 
-Inspect the PDF and root README first; then review the `rejection_proxy` correction and its rerun impact,
-the subject/coverage/conformal caveats in the technical README, and the provenance/AI note. Use the file
-list and `git diff main` to inspect all local changes. Decide whether to commit and publish only after
-that review. Nothing was pushed, merged or opened as a PR.
+Start with the two-page PDF and root README. For a deeper technical review, read the
+`rejection_proxy` correction and its rerun impact above, then the subject/coverage/conformal
+caveats in the technical README and the provenance/AI note. The file list and historical diff
+summary document what changed from `1921f37` to the review commit.
 
 ## Proposed frozen third-dataset validation (future work, not performed)
 
