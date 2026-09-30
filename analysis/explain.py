@@ -26,7 +26,7 @@ TOP = 8
 
 LABELS = {
     "tmpl_corr_mean": "beat-template correlation (mean)", "tmpl_corr_p10": "beat-template correlation (10th pct)",
-    "tmpl_frac_lt08": "share of beats with template corr < 0.8", "reject_frac": "share of beats rejected",
+    "tmpl_frac_lt08": "share of beats with template corr < 0.8", "reject_frac": "rejection count proxy",
     "miss_frac_est": "estimated share of missed beats", "rr_cv": "RR coefficient of variation",
     "rr_diff_mad_rel": "median successive RR change (rel.)", "rr_diff_max_rel": "largest successive RR change (rel.)",
     "ppg_rmssd": "PPG RMSSD estimate", "hr_ppg": "PPG heart rate", "n_peaks": "detected peaks", "n_accepted": "accepted intervals",

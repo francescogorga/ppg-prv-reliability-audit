@@ -1,14 +1,18 @@
 #!/usr/bin/env bash
-# Verifica riproducibile: esistono campi di qualita'/confidenza per HR/HRV/RR
-# nello schema OpenAPI pubblico di Terra (github.com/tryterra/openapi)?
-# Output salvato in analysis/results/terra_schema_check.txt
+# Inspect quality/confidence fields in Terra's public OpenAPI schema.
+# This describes a public schema snapshot, not Terra's internal quality handling.
+# Usage: ./check_terra_schema.sh [commit]; default reproduces the saved snapshot.
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 TMP="$(mktemp -d)"
+trap 'rm -rf "$TMP"' EXIT
+REV="${1:-5944de59e7f2ccb941254c6907d52ebee08d58d8}"
 OUT="$HERE/results/terra_schema_check.txt"
 mkdir -p "$HERE/results"
-git clone -q --depth 1 https://github.com/tryterra/openapi "$TMP/openapi"
+git init -q "$TMP/openapi"
 cd "$TMP/openapi"
+git fetch -q --depth 1 https://github.com/tryterra/openapi "$REV"
+git checkout -q --detach FETCH_HEAD
 {
   echo "# Terra OpenAPI schema check"
   echo "repo: https://github.com/tryterra/openapi"
@@ -18,6 +22,7 @@ cd "$TMP/openapi"
   for f in HeartRateDataSample HeartRateVariabilityDataSampleRMSSD \
            HeartRateVariabilityDataSampleSDNN RRIntervalSample HeartRateContext; do
     echo "## schemas/core/$f.yaml -- top-level properties / consts"
+    [ -f "schemas/core/$f.yaml" ] || { echo "Missing schema: $f" >&2; exit 1; }
     grep -E '^  [a-z_]+:|const:|title:' "schemas/core/$f.yaml" || true
     echo
   done
@@ -29,6 +34,6 @@ cd "$TMP/openapi"
     grep -liE 'quality|confidence|accuracy|reliab|artifact|artefact' "schemas/core/$f" || true
   done
   echo "(empty above = no match)"
-} > "$OUT"
-rm -rf "$TMP"
+} > "$TMP/schema_check.txt"
+cp "$TMP/schema_check.txt" "$OUT"
 echo "wrote $OUT"

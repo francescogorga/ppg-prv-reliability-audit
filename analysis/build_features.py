@@ -17,7 +17,7 @@ import pandas as pd
 
 import app_pipeline as ap
 from ecg_rpeaks import detect_r_peaks, rmssd_clean
-from features import FEATURES, window_features
+from features import window_features
 from run_analysis import START_S, WIN_S, ecg_rmssd, ppg_window, tick_frame
 from run_wildppg import MAX_REF_REJECT, invert
 
@@ -82,7 +82,6 @@ def main(which):
             rows = [r for rs in pool.map(forehead_participant, pids) for r in rs]
         pd.DataFrame(rows).to_csv(RES / "features_forehead.csv", index=False)
         print("forehead participants:", len(pids), "windows:", len(rows))
-    assert all(k in FEATURES for k in FEATURES)
 
 
 if __name__ == "__main__":

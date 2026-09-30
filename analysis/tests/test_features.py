@@ -33,3 +33,20 @@ def test_template_correlation_drops_with_motion():
     assert fc["tmpl_corr_mean"] > 0.95
     assert fm["tmpl_corr_mean"] < fc["tmpl_corr_mean"] - 0.05
     assert fm["reject_frac"] >= fc["reject_frac"]
+
+
+def test_rejection_proxy_window_boundary_and_empty():
+    from features import rejection_proxy
+    # A closing interval may start before this window; n accepted can equal n peaks.
+    assert rejection_proxy(60, 60) == 0.0
+    assert rejection_proxy(60, 45) == 0.25
+    # A one-sample peak/decision offset can move one count across the boundary.
+    assert rejection_proxy(60, 61) == 0.0
+    assert rejection_proxy(0, 0) == 1.0
+
+
+def test_flat_window_has_no_valid_template_or_rmssd():
+    f = _feats(np.zeros(8000), 100.0, 20, 80)
+    assert np.isnan(f["tmpl_corr_mean"])
+    assert np.isnan(f["ppg_rmssd"])
+    assert 0 <= f["reject_frac"] <= 1

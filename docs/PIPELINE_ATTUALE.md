@@ -5,8 +5,12 @@ Descrive cosa fa **oggi** il codice, non cosa era previsto. Tutti i percorsi son
 
 Il porting Python riga per riga di questa pipeline è in `analysis/app_pipeline.py`. È verificato
 contro le classi Dart originali (eseguite senza modifiche da `analysis/dart_ref/ref.dart`):
-filtrato, picchi, SQI, RMSSD e buffer RR coincidono (27 test di equivalenza, 30 in totale:
-`analysis/results/pytest_output.txt`).
+filtrato, picchi, SQI, RMSSD e buffer RR coincidono nei test sintetici. Per la suite attuale
+e i risultati della review, vedere `docs/FINAL_REVIEW.md`.
+
+Nota terminologica: la variabilità degli intervalli PPG è PRV, anche se l’app la chiama HRV.
+I percorsi al firmware, all’app e alla patch qui citati appartengono al progetto originale,
+non distribuito in questa repo. Questo documento ne conserva la descrizione storica.
 
 ---
 
@@ -163,9 +167,9 @@ score. SpO₂ e PI sono mostrati nel footer di debug (`home_page.dart:386-391`),
 Istanza: `baselineSeconds: 60, updateRateHz: 1, slowWindowSeconds: 12` (`home_page.dart:49-53`).
 
 - **Baseline manuale**: parte con il pulsante "Start Baseline Calibration" (`home_page.dart:370-372,576-579`),
-  dura 60 s e salva media e deviazione standard di HR e RMSSD (`:143-193`). Il parametro
+  raccoglie 60 aggiornamenti accettati (può durare più di 60 s con il gate SQI) e salva media e deviazione standard di HR e RMSSD (`:143-193`). Il parametro
   `startBaseline` di `HomePage` (`home_page.dart:23,27`) non è usato.
-- **Valori correnti**: media mobile di 12 s (`:92-95,221-222`).
+- **Valori correnti**: media degli ultimi 12 valori validi accettati (`:92-95,221-222`), non necessariamente 12 s di calendario.
 - **Score** (`:216-260`): per HR `z = (HR − HR_base)/max(SD_base, 2 bpm)`, per RMSSD
   `z = (RMSSD_base − RMSSD)/max(SD_base, 5 ms)`. Ogni z è mappato linearmente in [0,1] (0 alla
   baseline, 1 a z ≥ 2,5, `:290-295`). Pesi 0,5 + 0,5, rinormalizzati se manca un termine.

@@ -3,7 +3,7 @@
 For every record, second by second (home_page._tickSecond):
   ecg      HR and RMSSD from the ECG, same definitions as the app (HR = 60000 / median of the
            last 10 RR; RMSSD over the last 60 RR, here only between consecutive clean RR).
-           This is what the app WOULD show with perfect beat timing: the reference.
+           This is the ECG-based application output, not psychological stress ground truth.
   v1_app   the app as deployed: v1 pipeline, stress updated only when SQI >= 0.4
   v2       v2 pipeline (systolic peak), stress updated every second
   v2_sqi   v2 pipeline with the app's SQI >= 0.4 gate

@@ -39,7 +39,7 @@ def panel_a(ax, R):
     ax.set_ylim(-0.25, 1.0)
     ax.set_xlabel("Median |RMSSD error| of kept windows (ms)")
     ax.set_ylabel("Kept RMSSD vs ECG RMSSD (Spearman)")
-    ax.set_title("A  HRV, finger (lab): keep 50% of windows", loc="left", fontsize=9.5, color=INK)
+    ax.set_title("A  PPG RMSSD, finger: keep 50% of windows", loc="left", fontsize=9.5, color=INK)
 
 
 def panel_b(ax, S):
@@ -62,7 +62,7 @@ def panel_b(ax, S):
     ax.set_xlim(0, 108)
     ax.set_ylim(0, 1.0)
     ax.set_xlabel("Minutes on which a stress level is shown (%)")
-    ax.set_ylabel("Agreement with ECG-based stress level (Cohen's kappa)")
+    ax.set_ylabel("Agreement with ECG-based app level (Cohen's kappa)")
     ax.set_title("B  Stress index: agreement vs minutes shown", loc="left", fontsize=9.5, color=INK)
     ax.legend(loc="upper right", fontsize=7, frameon=False)
 
@@ -81,9 +81,10 @@ def main():
             ax.spines[s].set_visible(False)
     panel_a(a, R)
     panel_b(b, S)
-    fig.text(0.01, 0.005, "Leave-one-subject-out; bars: 95% bootstrap CI over subjects. In B the reference is the app's own stress index "
-             "computed from ECG HR/HRV; each gate is shown at 100%, 50% and 25% target coverage.", fontsize=7, color=INK2)
-    fig.tight_layout(rect=(0, 0.04, 1, 1))
+    fig.text(0.01, 0.005, "Bars: 95% subject-bootstrap CI. B compares the same app with PPG versus ECG HR/RMSSD.\n"
+             "Display coverage follows baseline gating; curves show ungated v2 and 50%/25% gate targets.",
+             fontsize=8, color=INK2)
+    fig.tight_layout(rect=(0, 0.08, 1, 1))
     for ext in ("png", "pdf"):
         fig.savefig(RES / f"fig_brief.{ext}", dpi=200, facecolor=SURFACE)
 

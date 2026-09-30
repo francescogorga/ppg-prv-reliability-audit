@@ -1,122 +1,149 @@
-# ppg-sqi-hrv-audit
+# Can a smart-glasses stress index trust PPG-derived HRV?
 
-**Can a smart-glasses stress index trust its heart-rate variability?** In the *Smart Wearables Design
-and Prototyping* course (Politecnico di Milano) our team built smart glasses with a PPG sensor on the
-nose bridge and a phone app that turns heart rate and HRV (RMSSD) into a stress index. The glasses were
-returned after the exam. This repository continues the work offline, on two public PPG + ECG datasets:
-finger in the lab (22 subjects) and forehead in daily life (all 16 WildPPG participants).
+[![tests](https://github.com/francescogorga/ppg-sqi-hrv-audit/actions/workflows/tests.yml/badge.svg)](https://github.com/francescogorga/ppg-sqi-hrv-audit/actions/workflows/tests.yml)
+
+Our university team built smart glasses with a nose-bridge PPG sensor and an app that converts
+heart rate and HRV (RMSSD) into a personal-baseline stress index. After returning the hardware,
+I audited the application offline against public PPG + ECG recordings: **22 finger subjects in
+laboratory activities and 16 forehead participants in daily life**.
+
+**Terminology:** the app calls this HRV. PPG pulse-to-pulse variability is strictly **PRV**;
+“PPG-derived HRV/RMSSD” here means that PRV estimate. ECG-derived RMSSD is the HRV reference.
+They are not universally interchangeable ([reference and method](analysis/README.md)).
 
 **Short answer.**
-- **Fix beat timing first.** The app timed beats on the diastolic foot of the pulse; its RMSSD was off
-  by 85.5 ms against a true median of 22.3 ms. Timing beats on the systolic peak cut this to 18.1 ms.
-- **Then trust only beat-consistent minutes.** How similar each beat is to the window's average beat was
-  the best of 24 ECG-free quality signals, better than the app's signal-quality index (SQI).
-- **What reaches the stress index.** Compared with the level the app would show from ECG-derived HR/HRV,
-  the app as deployed agreed with kappa 0.28 on the finger, with false alarms in 31% of calm minutes.
-  With fixed timing and a beat-consistency gate, agreement was 0.68 on 46% of minutes. At the forehead in
-  daily life it never exceeded 0.33.
-- **Uncertainty.** Calibrated intervals were honest but could only confirm "calm".
 
-The two-page write-up is [`brief/brief.pdf`](brief/brief.pdf).
+- **Fix beat timing first.** On finger data, the ungated app pipeline had median absolute error
+  **85.5 ms**, against median ECG RMSSD **22.3 ms**. Offline systolic timing reduced error to
+  **18.1 ms**; the original detector used an unstable diastolic-foot fiducial.
+- **Then assess beat consistency.** Beat-template correlation was one of the strongest interpretable
+  candidates in this audit of 24 ECG-free features. Its selection is exploratory, not externally validated.
+- **Follow the error downstream.** Finger stress-level κ rose from **0.28 → 0.40 → 0.68** with
+  timing correction and consistency gating, at **46% realized display coverage**. Conditional false
+  alarms fell from **31% to 13%**. The reference is the same app using ECG-derived HR/RMSSD,
+  **not psychological stress ground truth**.
+- **Free-living forehead PPG still fails.** Ungated v2 RMSSD error remains **89.2 ms**. A more
+  aggressive display gate reaches only **κ = 0.33 at 16% coverage**. Quality ranking cannot rescue
+  a fundamentally unreliable beat series.
+- **Uncertainty exposes the problem.** Split conformal targets 90% marginal coverage under
+  exchangeability, not coverage for each person. Forehead score intervals span the full 0–100 scale
+  in the median; confident score bands are overwhelmingly calm.
 
-![HRV gates and stress-index agreement](brief/fig_brief.png)
+Read the [two-page brief](brief/brief.pdf), then the [full method in English](analysis/README.md).
+The Python reconstruction is checked against committed outputs from the original Dart classes;
+unit tests and saved-table analyses need no raw-data download.
 
-| Stress level shown vs ECG-based level | Minutes shown | Cohen's kappa (95% CI) | False alarms |
+![PPG RMSSD selection and agreement with the ECG-based application output](brief/fig_brief.png)
+
+<!-- BEGIN STRESS_TABLE -->
+| Stress output vs ECG-based app output | Minutes shown | Cohen’s κ (95% CI) | False alarms |
 |---|---|---|---|
-| Finger, lab — app as deployed | 100% | 0.28 (0.21–0.36) | 31% |
-| Finger — fixed beat timing | 100% | 0.40 (0.29–0.52) | 25% |
-| Finger — fixed timing + beat-consistency gate | 46% | 0.68 (0.52–0.79) | 13% |
-| Forehead, daily life — app as deployed | 91% | 0.15 (0.12–0.19) | 43% |
-| Forehead — fixed timing + beat-consistency gate | 16% | 0.33 (0.16–0.42) | 36% |
+| Finger — original app | 100% | 0.28 (0.21–0.36) | 31% |
+| Finger — systolic v2 | 100% | 0.40 (0.29–0.52) | 25% |
+| Finger — v2 + consistency, 50% target | 46% | 0.68 (0.52–0.79) | 13% |
+| Forehead — original app | 91% | 0.15 (0.12–0.19) | 43% |
+| Forehead — v2 + consistency, 25% target | 16% | 0.33 (0.16–0.42) | 36% |
+<!-- END STRESS_TABLE -->
 
-The reference is the app's own stress index computed from ECG-derived HR/HRV, i.e. what the app would
-show with perfect beats. It is not an independent stress measure. Every number comes from a script in
-`analysis/` whose output is saved in `analysis/results/`; analyses re-run bit-identically (hashes in
-`analysis/README.md`, in Italian).
+“Minutes shown” uses evaluable non-baseline minutes with a screened ECG reference as its denominator.
+The finger gate targets 50% before baseline/session exclusions; the forehead gate targets 25%.
+False alarms are non-calm outputs among **displayed ECG-reference-calm minutes**. Abstentions are
+not counted as errors or successes. CIs resample participants, not individual minutes.
 
-## How the study got here
+## Why low error alone is insufficient
 
-1. **The app as deployed** (`run_analysis.py`, `run_wildppg.py`). Large RMSSD error; the SQI (threshold
-   0.4) discarded nothing on finger data.
-2. **Ceiling of any gate** (`oracle_check.py`). Even a perfect gate could not rescue the app's beat
-   detector: only 1.2% of windows were good. The detector timed beats on the diastolic foot.
-3. **v2** (not in the app). Beats timed on the systolic peak; `calibrate_sqi.py` calibrates gate
-   thresholds on held-out subjects.
-4. **Which signal tells when to trust HRV** (`features.py`, `quality_models.py`, `robustness_quality.py`).
-   24 ECG-free features, single features and ML models, all leave-one-subject-out.
-   - Beat-template correlation is the best or joint-best gate, and it works within one activity.
-   - A "keep lowest estimates" rule looks as good on error but its kept values do not follow the ECG.
-     SHAP (`explain.py`) pointed to this circularity.
-5. **What reaches the stress index** (`stress.py`, `build_stress.py`, `stress_eval.py`). The app's stress
-   index, verified against the original Dart, is replayed second by second on both datasets.
-6. **Uncertainty** (`conformal.py`, `stress_eval.py`). Split-conformal intervals keep ~90% coverage on
-   average, but not per person. On the stress score, "confident" levels were almost always "calm": at the
-   forehead they did no better than always answering "calm" (kappa 0.03).
+A rule that keeps low PPG RMSSD can look accurate simply because ECG RMSSD is often low.
+The explicit `ppg_rmssd_low` negative control exposes this: on the forehead, its retained estimates
+track ECG weakly (Spearman **0.20**, versus **0.50** for template consistency, both at 25% ranking
+coverage). SHAP highlighted reliance on the estimate itself and motivated this check; it did not
+prove circularity. Tracking supplements error and coverage, and does not eliminate bias.
 
-## What is in this repository
+LOSO excludes each test subject from model fitting and direction selection. Cross-site rankings
+provide a robustness check, but both datasets influenced feature development and interpretation.
+An independent third dataset is needed for external validation.
 
-| Path | Content |
+## Repository map
+
+| Path | Purpose |
 |---|---|
-| `analysis/app_pipeline.py`, `analysis/stress.py` | Line-by-line Python ports of the app's PPG pipeline (`systolic=True` gives v2) and stress index. |
-| `analysis/tests/` | 39 tests: equivalence with the original Dart code (pipeline and stress index), v2, features, R-peak detector. |
-| `analysis/run_analysis.py`, `run_wildppg.py`, `oracle_check.py`, `calibrate_sqi.py` | First analyses of the app's SQI; ceiling of any gate; honest threshold calibration. |
-| `analysis/features.py`, `build_features.py`, `quality_models.py`, `robustness_quality.py` | ECG-free quality features, models and robustness checks. |
-| `analysis/build_stress.py`, `stress_eval.py`, `fig_brief.py` | Stress-index replay and evaluation; brief figure. |
-| `analysis/conformal.py`, `explain.py` | Uncertainty (split conformal) and explainability (SHAP). |
-| `analysis/ecg_rpeaks.py`, `validate_rpeaks.py` | R-peak detector for WildPPG, validated on manual annotations. |
-| `analysis/check_terra_schema.sh` | Checks whether a public wearable-API schema has quality fields. |
-| `analysis/results/` | All outputs (JSON, CSV, figures). |
-| `brief/` | The brief (Markdown and PDF) and the script that builds the PDF. |
-| `docs/PIPELINE_ATTUALE.md` | Detailed description of the app pipeline (in Italian). |
+| `brief/` | Research brief, PDF and build script |
+| `analysis/README.md` | Methods, definitions, tables, caveats and reproduction |
+| `analysis/app_pipeline.py`, `analysis/stress.py` | Reconstructed application processing and stress algorithm; `systolic=True` enables offline v2 |
+| `analysis/tests/`, `analysis/dart_ref/out/` | Synthetic regression tests and committed Dart equivalence fixtures |
+| `analysis/features.py`, `quality_models.py`, `robustness_quality.py` | ECG-free features, LOSO rankings and selection-bias checks |
+| `analysis/ecg_rpeaks.py`, `validate_rpeaks.py` | WildPPG R detector benchmarked on annotated **PTT-PPG** ECG |
+| `analysis/build_stress.py`, `stress_eval.py`, `conformal.py` | Downstream replay, display gates and uncertainty |
+| `analysis/results/` | Saved results and figures traceable to scripts |
+| `docs/PIPELINE_ATTUALE.md` | Original implementation audit, in Italian |
+| `docs/FINAL_REVIEW.md` | Local review findings, verification, interview preparation and frozen-validation proposal |
 
 ## Reproduce
 
+Lightweight checks (Python 3.14; this review used 3.14.3):
+
 ```bash
-cd analysis
-python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
-./reproduce.sh
+python3 -m venv analysis/.venv
+analysis/.venv/bin/python -m pip install -r analysis/requirements.txt
+analysis/.venv/bin/python -m pytest analysis/tests/
+analysis/.venv/bin/python analysis/check_doc_numbers.py
+analysis/.venv/bin/python brief/build_pdf.py  # Chrome/Chromium required
 ```
 
-`reproduce.sh`:
-- downloads PTT-PPG (~410 MB, SHA-256 verified) and all 16 WildPPG participants (~19.6 GB transfer, one file at a time, raw files deleted after extraction);
-- runs the tests and every analysis, and rebuilds every figure (about 3 h, mostly the WildPPG download,
-  which never needs more than ~2.5 GB of free disk at once).
+For a full raw-data rerun: `cd analysis && ./reproduce.sh`. It transfers ~410 MB PTT-PPG plus
+~19.6 GB WildPPG; allow several GB free disk and hours of runtime. Raw WildPPG files are deleted
+after extraction, but extracted data accumulate. CI runs only the unit tests.
 
-Most analyses only need the saved tables in `analysis/results/`: `quality_models.py`, `robustness_quality.py`,
-`conformal.py`, `explain.py`, `stress_eval.py`, `fig_tracking.py` and `fig_brief.py` run without downloading any data.
+The model, robustness, conformal and stress-evaluation scripts can rerun from committed CSVs.
+Direct dependencies and random seeds are fixed. Prior runs produced identical saved outputs in
+the recorded environment; cross-platform bitwise identity is not guaranteed. See the technical
+README for checksums, input verification and the review's count-feature correction.
 
-## Provenance
+## Scope and provenance
 
-The app is a **team project** from the *Smart Wearables Design and Prototyping* course at
-Politecnico di Milano (2026): Flutter app and STM32 firmware for glasses with a MAX30101 PPG sensor
-and a skin-temperature sensor on the nose bridge. Its source code is **not** included here.
+The Flutter/STM32 glasses prototype was a **team project** in *Smart Wearables Design and
+Prototyping*, Politecnico di Milano (2026). This repository contains Francesco Gorga's independent
+post-course audit. Original app source is not redistributed. The hardware was returned; no glasses
+recordings are claimed. **v2 is an offline experiment, not a deployed application change.**
 
-`analysis/dart_ref/ref.dart` runs the app's original Dart classes on seeded synthetic signals. Its
-outputs are committed in `analysis/dart_ref/out/`, and the equivalence tests read them from there.
-Regenerating them requires the original app sources, so `reproduce.sh` skips that step when they are
-missing.
+Dart reference outputs are committed. Regenerating them requires the original app sources and
+Dart SDK; ordinary tests read the fixtures. The Flutter page's packet/tick ordering is transcribed
+in Python and standalone Dart wrappers rather than executed inside Flutter.
 
-The glasses hardware was returned at the end of the course, so no data from the glasses is included.
+AI coding tools were used during implementation and review. Existing authorship metadata and
+Git history are preserved. Scientific claims and this review remain subject to the author's final review.
 
-## Data and licences
+## Relevance to wearable-data platforms
 
-- **Code**: MIT (see `LICENSE`).
-- **PTT-PPG**: Mehrgardt P., Khushi M., Poon S., Withana A. *Pulse Transit Time PPG Dataset* (v1.1.0),
-  PhysioNet, 2022, https://doi.org/10.13026/jpan-6n92 — Open Data Commons ODbL 1.0.
-- **WildPPG**: Meier M., Demirel B. U., Holz C. *WildPPG: A Real-World PPG Dataset of Long Continuous
-  Recordings*, NeurIPS 2024 Datasets and Benchmarks — CC BY-NC-SA 4.0 (non-commercial).
-  Forehead-derived results (`analysis/results/wildppg_*`, `features_forehead.csv`, `oof_scores_forehead.csv`, `stress_forehead.csv`)
-  are shared under the same licence.
-- Neither dataset is redistributed here; the scripts download them from the original sources.
+Derived scores inherit upstream measurement error. If device partners expose beat-level quality
+metadata, preserving it beside normalized biomarkers could support downstream reliability audits.
+Platforms receiving only provider summaries cannot reconstruct raw-waveform template consistency.
+
+At commit `5944de59e7f2ccb941254c6907d52ebee08d58d8`, the inspected HR, HRV and RR sample objects
+in Terra's public OpenAPI schema did not expose a quality/confidence field
+([saved check](analysis/results/terra_schema_check.txt)). This says nothing about Terra's internal
+quality handling or proprietary pipeline. It is a schema observation, not a product recommendation.
 
 ## Limitations
 
-- **No data from the glasses**: neither dataset is recorded at the nose bridge.
-- **Sample size**: 22 finger subjects and 16 forehead participants, so the CIs are wide. The first SQI analysis
-  (`run_wildppg.py`) uses only 2 forehead participants; everything in the brief uses all 16.
-- **Polarity**: the polarity of the WildPPG signal is inferred, not documented by its authors.
-- **Stress reference**: the app's own stress index on ECG-derived HR/HRV, not a validated stress measure.
-- **Design choices**: the SQI is an unvalidated heuristic hand-calibrated on the prototype; the 24 features
-  are hand-designed; forehead R peaks are detected automatically; v2 is an offline change.
+- **No glasses data.** Finger and forehead differ from nose bridge in geometry, contact, vascular
+  bed and motion. PTT-PPG shares the MAX30101 chip; WildPPG uses MAX86141.
+- **Reference scope.** WildPPG has ECG but no manual R annotations. The detector's median 1.57 ms
+  timing error and 0.19 ms cleaned-RMSSD difference are from **PTT-PPG validation only**.
+  Accuracy on WildPPG itself remains unannotated.
+- **Exploratory selection.** Small cohorts, correlated windows, broad subject-bootstrap CIs and
+  no independent third-dataset confirmation. Selected-window results do not describe all-day reliability.
+- **Stress validity.** Agreement with an ECG-based version of the app does not validate the app's
+  psychological interpretation. The conformal score-band analysis also differs from hysteretic app levels.
+- **Forehead failure remains.** Relative quality improvement leaves large absolute PRV error,
+  weak downstream agreement and mostly uninformative uncertainty.
 
-Details in the brief and in `analysis/README.md`.
+## Data and licences
+
+- Code: MIT ([LICENSE](LICENSE)).
+- PTT-PPG: Mehrgardt et al., *Pulse Transit Time PPG Dataset* v1.1.0, PhysioNet (2022),
+  [dataset DOI](https://doi.org/10.13026/jpan-6n92), ODbL 1.0.
+- WildPPG: Meier, Demirel and Holz, *WildPPG: A Real-World PPG Dataset of Long Continuous Recordings*,
+  NeurIPS 2024 Datasets and Benchmarks; CC BY-NC-SA 4.0 (non-commercial). Forehead-derived results
+  retain that licence, including the forehead CSVs and WildPPG outputs.
+- Raw datasets are not redistributed; scripts fetch the original sources. The saved API check
+  and dataset access notes describe dated observations.

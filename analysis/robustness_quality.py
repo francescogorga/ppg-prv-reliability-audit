@@ -12,9 +12,9 @@ Uses the leave-one-subject-out scores saved by quality_models.py.
      ppg_rmssd_low     keep the windows with the lowest RMSSD estimate (no model)
      gbm_signal_only   gradient boosting WITHOUT the RMSSD estimate and the RR-variability
                        features (rr_cv, rr_diff_*, SQI periodicity and full SQI)
-   and, on the windows each gate keeps, whether the estimate still TRACKS the true HRV
+   and, on the windows each gate keeps, whether the estimate still TRACKS ECG-derived RMSSD
    (Spearman and Pearson between RMSSD_ppg and RMSSD_ecg) - lowering the error is not
-   enough if the kept values do not follow the truth.
+   enough if the kept values do not follow the ECG reference.
 Metrics per subset: Spearman between score and |error| (sign flipped: higher = better)
 and gap closed (same definition as quality_models.py, computed inside the subset).
 Output: results/robustness_quality.json

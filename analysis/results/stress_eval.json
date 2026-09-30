@@ -168,29 +168,29 @@
     },
     "conformal": {
       "target": 0.9,
-      "coverage": 0.9044811320754716,
-      "width_median": 49.02334036729043,
-      "confident_share": 0.342688679245283,
-      "confident_level_matches_ecg_band": 0.9710942876806608,
-      "confident_kappa": 0.5007608108771413,
+      "coverage": 0.9037735849056604,
+      "width_median": 49.484606703650186,
+      "confident_share": 0.33985849056603773,
+      "confident_level_matches_ecg_band": 0.9757113115891742,
+      "confident_kappa": 0.5304572072281752,
       "confident_ecg_band_mix": {
-        "1": 1393,
-        "2": 49,
-        "3": 11
+        "1": 1386,
+        "2": 47,
+        "3": 8
       },
       "confident_ppg_band_mix": {
-        "1": 1427,
-        "2": 23,
-        "3": 3
+        "1": 1420,
+        "2": 20,
+        "3": 1
       },
       "all_minutes_ecg_band_mix": {
         "1": 317,
         "2": 80,
         "3": 27
       },
-      "always_calm_agreement_on_confident": 0.9587061252580867,
-      "confident_false_alarm": 0.0021536252692031586,
-      "confident_miss": 0.6166666666666667,
+      "always_calm_agreement_on_confident": 0.9618320610687023,
+      "confident_false_alarm": 0.0,
+      "confident_miss": 0.6181818181818182,
       "note": "confident = the whole interval lies in one band (<35, 35-65, >=65)"
     }
   },
@@ -363,28 +363,28 @@
     },
     "conformal": {
       "target": 0.9,
-      "coverage": 0.8997452978056426,
+      "coverage": 0.9001861285266458,
       "width_median": 100.0,
-      "confident_share": 0.23516849529780565,
-      "confident_level_matches_ecg_band": 0.829834208114638,
-      "confident_kappa": 0.03027526120103663,
+      "confident_share": 0.2354819749216301,
+      "confident_level_matches_ecg_band": 0.8295615275813296,
+      "confident_kappa": 0.037044211060040855,
       "confident_ecg_band_mix": {
-        "1": 19867,
-        "2": 3460,
-        "3": 679
+        "1": 19868,
+        "2": 3489,
+        "3": 681
       },
       "confident_ppg_band_mix": {
-        "1": 23914,
-        "3": 92
+        "1": 23932,
+        "3": 106
       },
       "all_minutes_ecg_band_mix": {
         "1": 6655,
         "2": 2326,
         "3": 1227
       },
-      "always_calm_agreement_on_confident": 0.8275847704740481,
-      "confident_false_alarm": 0.0006040167111290079,
-      "confident_miss": 0.9806716598212128,
+      "always_calm_agreement_on_confident": 0.8265246692736501,
+      "confident_false_alarm": 0.0004529897322327361,
+      "confident_miss": 0.9767386091127098,
       "note": "confident = the whole interval lies in one band (<35, 35-65, >=65)"
     }
   }

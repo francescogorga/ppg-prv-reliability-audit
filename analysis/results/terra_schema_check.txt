@@ -1,7 +1,7 @@
 # Terra OpenAPI schema check
 repo: https://github.com/tryterra/openapi
 commit: 5944de59e7f2ccb941254c6907d52ebee08d58d8 Mon Sep 28 14:12:38 2026 +0000
-checked_at: 2026-09-28T14:15:24Z
+checked_at: 2026-09-29T20:50:26Z
 
 ## schemas/core/HeartRateDataSample.yaml -- top-level properties / consts
   timestamp:

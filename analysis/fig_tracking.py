@@ -16,7 +16,7 @@ SURFACE, INK, INK2, GRID, MUTED = "#fcfcfb", "#0b0b0b", "#52514e", "#e4e3df", "#
 STYLE = {  # method: (label, colour, marker)
     "oracle": ("Oracle (needs ECG)", INK, "*"),
     "tmpl_corr_mean": ("Beat-template correlation", "#1baf7a", "o"),
-    "reject_frac": ("Rejected-beat share", MUTED, "o"),
+    "reject_frac": ("Rejection count proxy", MUTED, "o"),
     "gbm": ("Gradient boosting, all features", MUTED, "s"),
     "gbm_signal_only": ("Gradient boosting, signal-only", MUTED, "D"),
     "ppg_rmssd_low": ("Keep lowest HRV estimates", "#eb6834", "v"),
@@ -69,7 +69,7 @@ def main():
     h, lab = axes[0].get_legend_handles_labels()
     fig.legend(h, lab, loc="lower center", ncol=5, frameon=False, fontsize=7.8, bbox_to_anchor=(0.5, 0.02))
     fig.text(0.01, 0.003, "v2 pipeline; scores from leave-one-subject-out models; bars: 95% bootstrap CI over subjects. "
-             "Better = left (lower error) and up (kept values follow the truth).", fontsize=7, color=INK2)
+             "Better = left (lower error) and up (kept values track ECG RMSSD).", fontsize=7, color=INK2)
     fig.tight_layout(rect=(0, 0.13, 1, 1))
     for ext in ("png", "pdf"):
         fig.savefig(RES / f"fig_tracking.{ext}", dpi=200, facecolor=SURFACE)

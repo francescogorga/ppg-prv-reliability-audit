@@ -27,6 +27,17 @@ FEATURES = [
 ]
 
 
+def rejection_proxy(n_peaks, n_accepted):
+    """Bounded count proxy, not an exact fraction of rejected interval decisions.
+
+    Intervals are assigned by closing packet, so the first can start before the
+    window: dividing by n_peaks - 1 is incorrect. Peak locations precede their
+    decision packets by one sample; boundary counts can therefore differ by one.
+    Clipping handles that mismatch. No peaks means maximally poor quality.
+    """
+    return float(np.clip(1 - n_accepted / max(n_peaks, 1), 0, 1)) if n_peaks else 1.0
+
+
 def _nan_features():
     return {k: math.nan for k in FEATURES}
 
@@ -50,7 +61,7 @@ def window_features(res: ap.SessionResult, fs: float, filtered: np.ndarray, peak
     t_acc = np.asarray(res.accepted_end_packet) / fs
     iv = np.asarray(res.accepted_intervals_ms)[(t_acc >= t0) & (t_acc < t1)]
     f["n_accepted"] = float(len(iv))
-    f["reject_frac"] = float(1 - len(iv) / max(len(pk) - 1, 1)) if len(pk) > 1 else 1.0
+    f["reject_frac"] = rejection_proxy(len(pk), len(iv))
     if len(iv) >= 3:
         med = float(np.median(iv))
         f["hr_ppg"] = 60000.0 / med

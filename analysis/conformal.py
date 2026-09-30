@@ -5,8 +5,8 @@ For each window the interval is  RMSSD_ppg +- q * sigma(x):
             fitted on log(1 + |error|)); q from the calibration set so that 90% of
             calibration windows satisfy |error| <= q * sigma(x)
   constant  sigma(x) = 1 (same width for every window)
-Split conformal guarantees 90% coverage on average only if test windows are
-exchangeable with calibration windows. We check where that holds:
+Split conformal targets 90% marginal coverage under exchangeability. Repeated
+windows within people do not establish that assumption; we measure empirical coverage:
   within dataset: the test subject is never used; the other subjects are split at
       random into training (2/3) and calibration (1/3), 20 repeats per test subject.
       Reported: pooled coverage, per-subject coverage (conditional), median width.
@@ -35,10 +35,13 @@ REPEATS = 20
 WIDTHS = (10.0, 20.0, 40.0)
 
 
-def conformal_q(scores):
+def conformal_q(scores, alpha=ALPHA):
     n = len(scores)
-    k = min(int(np.ceil((n + 1) * (1 - ALPHA))), n)
-    return float(np.sort(scores)[k - 1])
+    if n == 0:
+        raise ValueError("Conformal calibration requires at least one score")
+    k = int(np.ceil((n + 1) * (1 - alpha)))
+    # The augmented (n+1)th order statistic is infinity, not the sample maximum.
+    return float(np.sort(scores)[k - 1]) if k <= n else float("inf")
 
 
 def fit_predict(train, calib, test):

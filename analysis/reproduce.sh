@@ -2,7 +2,9 @@
 # Rebuilds every number and the figure used in brief/brief_draft.md.
 set -euo pipefail
 cd "$(dirname "$0")"
-[ -d .venv ] || { python3 -m venv .venv && .venv/bin/pip install -q -r requirements.txt; }
+[ -x .venv/bin/python ] || python3 -m venv .venv
+.venv/bin/python -m pip install -q -r requirements.txt
+.venv/bin/python -m pip check
 ./download_ptt_ppg.sh                                   # ~410 MB, SHA-256 verified
 # Dart reference outputs (dart_ref/out/) are committed. Regenerating them needs the Dart SDK
 # and the original app sources next to this folder (team project, not published).
@@ -17,7 +19,7 @@ fi
 .venv/bin/python fiducial_check.py > /dev/null          # results/fiducial_check.{csv,json}
 .venv/bin/python validate_rpeaks.py > /dev/null         # results/rpeak_validation.json (R detector vs manual peaks)
 ./download_wildppg.sh all                               # 16 files, ~19.6 GB transfer one at a time; raw deleted after extraction
-.venv/bin/python run_wildppg.py                         # results/wildppg_*.{csv,json}
+.venv/bin/python run_wildppg.py an0 e61                 # results/wildppg_*.{csv,json}
 .venv/bin/python wildppg_channel_check.py > /dev/null   # results/wildppg_channel_check.json
 .venv/bin/python oracle_check.py > /dev/null            # results/oracle_check.json, fig_oracle.{png,pdf}
 .venv/bin/python calibrate_sqi.py                       # results/sqi_calibration.json
@@ -31,6 +33,9 @@ fi
 .venv/bin/python stress_eval.py                         # results/stress_eval.json (~4 min)
 .venv/bin/python fig_brief.py                           # results/fig_brief.{png,pdf} (brief figure)
 .venv/bin/python make_figure.py                         # results/fig_sqi_tradeoff.{png,pdf}
+cp results/fig_brief.png ../brief/fig_brief.png
+.venv/bin/python check_doc_numbers.py --write
+.venv/bin/python ../brief/build_pdf.py                  # requires Chrome/Chromium
 ./check_terra_schema.sh                                 # results/terra_schema_check.txt (network)
 shasum -a 256 results/summary.json results/sweep.csv results/fiducial_check.json \
   results/rpeak_validation.json results/wildppg_summary.json results/wildppg_sweep.csv \

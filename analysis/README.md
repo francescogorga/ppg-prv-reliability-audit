@@ -1,478 +1,549 @@
-# Analisi: quanto errore sull'HRV toglie l'SQI dell'app, e quanti dati costa?
+# Analysis: how much PPG RMSSD error does the app's SQI remove, and how much data does it cost?
 
-Due dataset: dito in laboratorio (PTT-PPG, §3–7) e fronte nella vita reale (WildPPG, §8).
+Two datasets: laboratory finger PPG (PTT-PPG, §§3–7) and free-living forehead PPG
+(WildPPG, §8). Sections 8–9 retain the initial two-participant forehead experiment;
+sections 10–11 use all 16 participants. Outputs are saved in `results/`.
 
-Tutti i numeri qui sotto vengono da `results/summary.json`, `results/sweep.csv` e
-`results/fiducial_check.json`, prodotti da `reproduce.sh`. L'intera catena è stata eseguita due volte
-e ha dato risultati identici bit per bit (hash SHA-256 in fondo).
+**Terminology.** The application calls its PPG-derived quantity HRV. Strictly it is pulse rate
+variability (PRV); here “PPG HRV/RMSSD” retains the app's terminology for that PRV estimate.
+ECG-derived RMSSD is the HRV reference. PRV and HRV are not universally interchangeable
+([Schäfer and Vagedes, 2013](https://pubmed.ncbi.nlm.nih.gov/22809539/)). Neither dataset
+measures the nose bridge, and sharing the MAX30101 chip does not establish equivalent measurement conditions.
 
-## 1. Cosa c'è in questa cartella
+Prior development logs report repeated identical outputs in the recorded environment. This is
+not a cross-platform bitwise guarantee: direct dependencies are pinned, transitive dependencies and
+BLAS/platform details are not. See §12 for reproduction and the review's result provenance.
 
-| File | Contenuto |
+## 1. Contents of this directory
+
+| File | Contents |
 |---|---|
-| `app_pipeline.py` | Porting Python riga per riga di `lib/processing/` + ordine delle operazioni di `home_page.dart`. `fs` è un parametro ovunque. |
-| `dart_ref/ref.dart`, `dart_ref/gen_reference.py` | Eseguono le **classi Dart originali dell'app** (importate in sola lettura) su segnali sintetici e salvano gli output in `dart_ref/out/`. |
-| `synthetic.py` | Segnali sintetici con seed fisso (NON sono dati reali). |
-| `tests/test_ecg_and_options.py` | 3 test: rilevatore R su ECG sintetico, pulizia RR con battito perso, opzione `record_sqi` che non cambia i picchi. |
-| `tests/test_port.py` | 27 test: equivalenza con il Dart, coefficienti del filtro = `scipy.signal.butter`, −3 dB ai tagli, RMSSD, arrotondamento Dart, recupero di HR/RMSSD su sintetico, SQI = 0 a sensore staccato, gate > 0,4 che non si avvia. |
-| `load_ptt.py`, `download_ptt_ppg.sh` | Download (verificato SHA-256) e lettura del dataset. |
-| `run_analysis.py` | Analisi principale. |
-| `fiducial_check.py` | Dove cadono i picchi dell'app rispetto all'onda R. |
-| `make_figure.py` | La figura del brief. |
-| `check_terra_schema.sh` | Verifica dei campi di qualità nello schema OpenAPI pubblico di Terra. |
-| `ecg_rpeaks.py`, `validate_rpeaks.py` | Rilevatore di picchi R (per WildPPG, che non ha annotazioni) e sua validazione sui picchi manuali di PTT-PPG a 128 Hz. |
-| `load_wildppg.py`, `download_wildppg.sh` | Download da polybox ETH, estrazione dei canali usati, cancellazione del grezzo. |
-| `run_wildppg.py`, `wildppg_channel_check.py` | Analisi alla fronte (WildPPG) e controllo canale IR/verde. |
-| `oracle_check.py` | Prova 1: il limite massimo di un filtro qualsiasi (oracolo che conosce l'errore vero). |
-| `calibrate_sqi.py` | Prova 2: soglie tarate su una parte delle persone e misurate sulle altre. |
-| `tests/test_v2.py` | 3 test della v2 (battito sul picco sistolico). |
-| `features.py`, `build_features.py` | Feature per minuto senza ECG (SQI e sue parti, battiti, somiglianza tra battiti, forma d'onda, accelerometro) e tabella con l'etichetta. |
-| `quality_models.py` | Quale segnale riconosce meglio i minuti buoni: feature singole, regressione logistica, gradient boosting, oracolo (leave-one-subject-out). |
-| `conformal.py` | Incertezza: intervalli con garanzia di copertura (conformal prediction). |
-| `explain.py` | Explainability: SHAP sul modello dell'errore, coefficienti della logistica. |
-| `robustness_quality.py`, `fig_tracking.py` | Controlli di robustezza (dentro attività e persona, circolarità, "i valori tenuti seguono la verità?") e figura del brief. |
-| `tests/test_features.py` | 2 test delle feature su segnali sintetici. |
-| `stress.py`, `dart_ref/stress_ref.dart`, `tests/test_stress.py` | Porting dell'indice di stress dell'app (`stress_detector.dart` + ciclo a 1 Hz di `home_page.dart`), verificato contro il Dart originale. |
-| `build_stress.py`, `stress_eval.py`, `fig_brief.py` | Replay dello stress dell'app su dito e fronte; accordo con lo stress "da ECG", filtri, incertezza; figura del brief. |
-| `reproduce.sh` | Rifà tutto da zero. |
-| `results/` | Output (CSV, JSON, figura, log). |
+| `app_pipeline.py` | Line-by-line Python port of the processing classes plus packet ordering from `home_page.dart`. Sampling rate is a parameter throughout. |
+| `dart_ref/ref.dart`, `dart_ref/gen_reference.py` | Execute the original, unmodified Dart processing classes on synthetic inputs; outputs are committed in `dart_ref/out/`. Regeneration requires the separate team app source. |
+| `synthetic.py` | Seeded synthetic signals, not real recordings. |
+| `tests/test_ecg_and_options.py` | Synthetic ECG R detection, RR cleaning with a missed beat, and invariance of peak detection to the `record_sqi` option. |
+| `tests/test_port.py` | Dart equivalence, filter coefficients versus SciPy, cutoff response, RMSSD, Dart rounding, synthetic HR/RMSSD recovery, sensor-off SQI and gate startup. |
+| `load_ptt.py`, `download_ptt_ppg.sh` | Dataset download with SHA-256 verification and loading. |
+| `run_analysis.py`, `fiducial_check.py`, `make_figure.py` | Original SQI audit, timing relative to ECG R peaks, and SQI tradeoff figure. |
+| `check_terra_schema.sh` | Inspect quality-related fields in a pinned public Terra OpenAPI schema snapshot. |
+| `ecg_rpeaks.py`, `validate_rpeaks.py` | Automatic R detector used on WildPPG; benchmarked against PTT-PPG manual annotations after ECG resampling to 128 Hz. |
+| `load_wildppg.py`, `download_wildppg.sh` | ETH polybox download, extraction of required channels, deletion of raw files. |
+| `run_wildppg.py`, `wildppg_channel_check.py` | Initial two-participant forehead audit and IR/green channel check. |
+| `oracle_check.py`, `calibrate_sqi.py` | Oracle ranking ceiling and thresholds calibrated on separate subjects. |
+| `tests/test_v2.py` | Systolic v2 behavior and unchanged v1 behavior. |
+| `features.py`, `build_features.py` | ECG-free minute features and a separate ECG error label. |
+| `quality_models.py` | Single-feature rankings, logistic regression, gradient boosting and ECG oracle; LOSO evaluation. |
+| `conformal.py`, `tests/test_conformal.py` | Split-conformal intervals targeting marginal coverage under exchangeability; finite-sample quantile tests. |
+| `explain.py` | SHAP error-model explanations and logistic coefficients. |
+| `robustness_quality.py`, `fig_tracking.py` | Within-activity/person checks, low-estimate negative control, reference tracking, and figure. |
+| `tests/test_features.py` | Feature completeness, template sensitivity to motion, count-proxy boundaries and absent-signal behavior. |
+| `stress.py`, `dart_ref/stress_ref.dart`, `tests/test_stress.py` | Stress algorithm and 1 Hz loop port verified against Dart fixtures. |
+| `build_stress.py`, `stress_eval.py`, `fig_brief.py` | Stress replay, ECG-based application comparison, display gates, uncertainty and brief figure. |
+| `reproduce.sh` | Full reproduction, including large downloads; see §12 first. |
+| `results/` | Intentionally committed CSV, JSON, figures and logs. |
 
-## 2. Verifica del porting
+## 2. Port verification
 
-`tests/test_port.py` confronta il porting con l'output delle classi Dart originali su 5 segnali
-sintetici (100, 64 e 125 Hz; pulito, con artefatti di movimento, sensore staccato), sia con gate SQI
-0,4 sia senza gate. Filtrato (tolleranza 1e-9), picchi (identici), SQI per campione (1e-12), RMSSD a
-1 Hz, numero di intervalli nel buffer e buffer RR finale coincidono. Esito, con gli altri test: **39 passed**
-(`results/pytest_output.txt`).
+`tests/test_port.py` compares Python with original Dart outputs on five synthetic signals:
+100, 64 and 125 Hz; clean, motion-contaminated and sensor-off segments; gate 0.4 and gate disabled.
+Filtered samples match within 1e-9, peaks exactly, per-sample SQI within 1e-12, and 1 Hz RMSSD,
+interval-buffer length and final RR buffer agree. The original suite had 39 passing tests;
+review-added regression tests are reported in `../docs/FINAL_REVIEW.md`.
 
-L'ordine delle operazioni per pacchetto (`home_page.dart:151-199`) è una mia trascrizione, perché
-`home_page.dart` dipende da Flutter e non si può eseguire fuori dall'app. Le classi di `processing/`
-invece girano senza modifiche.
+The packet operation ordering (`home_page.dart:151–199`) is a transcription: the Flutter-dependent
+page cannot run as a standalone Dart program. The processing classes themselves ran unmodified.
+Committed fixtures make equivalence tests usable without redistributing the original app; they do
+not let an external reviewer independently regenerate the Dart reference without that source.
 
-## 3. Scelta del dataset
+## 3. Dataset choice
 
-Controllato il 2026-09-28:
+Access observations below were recorded on 2026-09-28, not a claim about future availability.
 
-| Candidato | Dimensione / accesso / licenza (verificati) | PPG | Scelto? |
+| Candidate | Recorded size / access / licence | PPG | Used? |
 |---|---|---|---|
-| WESAD | zip 2,25 GB (header HTTP), link pubblico senza registrazione | BVP dell'Empatica E4 al polso, 64 Hz | no |
-| PPG-DaLiA | zip 2,87 GB (pagina UCI), CC BY 4.0, senza registrazione | BVP dell'Empatica E4 al polso, 64 Hz | no (download avviato e interrotto, file parziale cancellato) |
-| TROIKA (IEEE SPC 2015) | non verificato | PPG da polso, 125 Hz, corsa su tapis roulant | no |
-| **PhysioNet Pulse Transit Time PPG v1.1.0** | 2,9 GB in totale ma solo ~410 MB nel formato WFDB usato qui; **ODbL 1.0**, accesso aperto senza login | **MAX30101 grezzo** (IR/Red/Green, con componente DC), 500 Hz | **sì** |
+| WESAD | 2.25 GB ZIP (HTTP header), public link without registration | Empatica E4 wrist BVP, 64 Hz | No |
+| PPG-DaLiA | 2.87 GB ZIP (UCI page), CC BY 4.0, no registration | Empatica E4 wrist BVP, 64 Hz | No; a partial download was stopped and deleted |
+| TROIKA (IEEE SPC 2015) | Not verified | Wrist PPG, 125 Hz, treadmill running | No |
+| **PhysioNet Pulse Transit Time PPG v1.1.0** | 2.9 GB overall; ~410 MB WFDB subset used here; ODbL 1.0, open access | Raw MAX30101 IR/red/green with DC, 500 Hz | **Yes** |
 
-Motivo. L'SQI dell'app ha un termine di ampiezza che divide per la componente DC del grezzo. Il BVP
-dell'E4 (WESAD, DaLiA) è distribuito già elaborato e centrato attorno allo zero, quindi quel termine
-non avrebbe senso. Questo si basa sulla documentazione nota dell'E4 e **non** è stato verificato
-scaricando quei dati. PTT-PPG usa invece **lo stesso chip degli occhiali** (MAX30101), fornisce il
-segnale grezzo con DC nella stessa polarità che riceve l'app (verificato: la luce ha il massimo ~180 ms
-dopo l'onda R, cioè sul piede dell'onda, e cala in sistole), ha ECG sincrono con picchi R annotati
-(rilevati automaticamente e verificati a mano dagli autori) e accelerometro. 22 soggetti, 3 attività
-(seduto, cammino sul posto, corsa), circa 8,5 minuti per registrazione.
+The app's SQI amplitude term divides by raw DC. Processed, near-zero-centred E4 BVP would not
+support that term as written. This was a dataset-selection rationale based on E4 documentation,
+not verified by downloading WESAD/DaLiA in this audit. PTT-PPG supplies raw DC-bearing data from
+the same MAX30101 chip, synchronous ECG with automatically detected, manually verified R peaks,
+and accelerometry. It includes 22 subjects, sitting, walking on the spot and running, with roughly
+8.5 minutes per recording. Raw light intensity peaks near the pulse foot and falls during systole;
+this polarity was checked against ECG-aligned waveforms. Finger placement still differs in vascular
+bed, optical path, contact pressure and motion from the glasses' nose bridge.
 
-Riferimento: Mehrgardt P., Khushi M., Poon S., Withana A. *Pulse Transit Time PPG Dataset* (v1.1.0).
-PhysioNet, 2022. https://doi.org/10.13026/jpan-6n92
+Reference: Mehrgardt P., Khushi M., Poon S., Withana A. *Pulse Transit Time PPG Dataset*, v1.1.0.
+PhysioNet, 2022. <https://doi.org/10.13026/jpan-6n92>.
 
-### Se si vuole usare WESAD o PPG-DaLiA a mano
+### If using WESAD or PPG-DaLiA later
 
-- PPG-DaLiA: https://archive.ics.uci.edu/dataset/495/ppg+dalia → "Download" (2,87 GB). Lo zip contiene
-  a sua volta `data.zip` con un file `SX/SX.pkl` per soggetto: `signal['wrist']['BVP']` (64 Hz),
-  `signal['chest']['ECG']` (700 Hz), `signal['wrist']['ACC']`.
-- WESAD: `curl -L -o WESAD.zip https://uni-siegen.sciebo.de/s/HGdUkoNlW1Ub0Gx/download` (2,25 GB). Stessa
-  struttura `SX/SX.pkl`. Prima dell'uso va controllata la licenza nel readme.
-- In entrambi i casi il termine di ampiezza dell'SQI non è applicabile così com'è: andrebbe testata
-  solo la periodicità, oppure servirebbe un'altra definizione di ampiezza.
+- PPG-DaLiA: <https://archive.ics.uci.edu/dataset/495/ppg+dalia>. The ZIP contains `data.zip`,
+  with `SX/SX.pkl` files: `signal['wrist']['BVP']` at 64 Hz, chest ECG at 700 Hz and wrist ACC.
+- WESAD: the recorded download command was
+  `curl -L -o WESAD.zip https://uni-siegen.sciebo.de/s/HGdUkoNlW1Ub0Gx/download`.
+  It uses a similar subject pickle structure. Check current access and the dataset licence before use.
+- Do not apply the DC-dependent SQI amplitude term unchanged. Freeze a compatible feature subset
+  or predeclare an adaptation before inspecting reference errors; see `../docs/FINAL_REVIEW.md`.
 
-## 4. Metodo
+## 4. Method
 
-- **Input**: `pleth_1` (IR, sensore 1), convertito in nA (×16384/2¹⁸; conta solo per la soglia di
-  presenza di 10 nA) e decimato da 500 a 100 Hz (FIR a fase zero), come negli occhiali. Nessun valore
-  mancante nei canali PPG usati.
-- **Pipeline**: `app_pipeline.run_session`, identica all'app. Due modalità:
-  - *senza gate*: `goodQuality` sempre vero; l'SQI viene calcolato ogni secondo, come nell'app;
-  - *gate nel ciclo* come nell'app (`goodQuality = SQI ≥ g` a ogni battito), con g = 0,2 / 0,3 / 0,4.
-- **Finestre**: 60 s non sovrapposte a partire da t = 10 s (per il warm-up del filtro): **491 finestre**,
-  tutte con riferimento ECG valido.
-- **Riferimento**: RR dai picchi R annotati; RR fuori da 300–2000 ms esclusi; differenze successive
-  solo tra RR adiacenti validi; almeno 20 RR.
-- **RMSSD da PPG**: formula dell'app (`computeRmssd`) sugli intervalli accettati dall'app che si chiudono
-  nella finestra; almeno 10 intervalli, altrimenti la finestra è "non calcolabile".
-- **Filtro SQI a livello di finestra**: SQI della finestra = mediana dei valori SQI a 1 Hz. Si tiene la
-  finestra se SQI ≥ τ, per τ da 0 a 1 (passo 0,05 fino a 0,8, poi 0,01).
-- **Ablazione**: SQI completo; solo ampiezza (`ampiezza × penalità`, con i suoi rifiuti); solo periodicità.
-- **Copertura** = finestre tenute / 491. **Metriche**: errore assoluto mediano, errore assoluto
-  percentuale mediano, Pearson e Spearman, Bland-Altman (bias ± 1,96 SD). **IC 95%**: bootstrap per
-  soggetto (2000 ricampionamenti, seed 20260928).
-- **Confronto**: filtro sull'accelerometro (deviazione standard del modulo nella finestra) a pari copertura.
+- **Input:** sensor 1 IR (`pleth_1`), converted to nA (×16384/2¹⁸, relevant to the 10 nA presence
+  threshold) and decimated from 500 to 100 Hz with a zero-phase FIR. No missing samples in the
+  PPG channels used here.
+- **Pipeline:** `app_pipeline.run_session`. Ungated mode always accepts the quality flag but
+  still computes SQI each second. In-loop modes use SQI ≥ g at each beat, g = 0.2/0.3/0.4.
+- **Windows:** 60 s, non-overlapping, beginning at t = 10 s after filter warmup. There are
+  491 finger windows, all with valid ECG references.
+- **ECG reference:** annotated R intervals in 300–2000 ms; successive differences only between
+  adjacent valid intervals; at least 20 valid RR intervals.
+- **PPG RMSSD:** the app's formula on accepted intervals whose closing packet falls in the
+  window; at least 10 accepted intervals or the estimate is unavailable. Rejected intervals are
+  removed as in the app, so adjacent accepted intervals need not be consecutive physiological beats.
+- **Window SQI gate:** median of 1 Hz SQI values; retain SQI ≥ τ. Sweep τ from 0 to 1 in steps of
+  0.05 below 0.8 and 0.01 thereafter.
+- **Ablation:** full SQI, amplitude-only (modulation × penalty with its rejection checks), periodicity-only.
+- **Coverage:** retained calculable windows / all 491 ECG-reference windows. Metrics: median
+  absolute and percentage errors, Pearson/Spearman, Bland–Altman bias ±1.96 SD. Subject bootstrap:
+  2,000 resamples, seed 20260928.
+- **Comparator:** accelerometer magnitude SD at matched coverage.
 
-## 5. Risultati
+## 5. Results
 
-RMSSD di riferimento (ECG): mediana **22,3 ms** (IQR 16,4–30,6).
+ECG RMSSD: median **22.3 ms**, IQR 16.4–30.6 ms (`summary.json`).
 
-| Condizione | Finestre tenute | Errore ass. mediano (IC 95%) | Bias BA [LoA] | r |
+| Condition | Windows retained | Median absolute error (95% CI) | BA bias [limits] | Pearson r |
 |---|---|---|---|---|
-| Pipeline dell'app, nessun filtro | 97,8% | **85,5 ms** (65,7–101,5) | +89,9 [−14,3; 194,0] | 0,11 |
-| + SQI ≥ 0,4 per finestra (soglia dell'app) | 97,8% | 85,5 ms, riduzione IC [0,0; 0,0] | uguale | 0,11 |
-| + SQI ≥ 0,4 nel ciclo (come l'app) | 97,8% | 85,5 ms, riduzione IC [0,00; 0,05] | +89,8 | 0,11 |
-| SQI ≥ 0,96 *(post hoc)* | 66,2% | 61,2 ms (50,5–72,6) | | |
-| SQI ≥ 0,97 *(post hoc)* | 40,3% | 45,8 ms (38,3–52,7) | | |
-| SQI ≥ 0,98 *(post hoc, 12 soggetti)* | 10,6% | 23,7 ms (19,3–31,2) | | |
-| Filtro accelerometro, stessa copertura di 0,96 / 0,97 / 0,98 | 66 / 40 / 11% | 73,9 / 57,8 / 60,3 ms | | |
-| *Ipotetico, non nell'app*: segnale invertito (picco sistolico), nessun filtro | 97,4% | **18,1 ms** (10,0–34,0) | +44,1 [−65,6; 153,8] | 0,06 |
-| Sensore 2 (`pleth_4`), nessun filtro | 95,7% | 110,6 ms | | −0,01 |
+| App pipeline, no gate | 97.8% | **85.5 ms** (65.7–101.5) | +89.9 [−14.3; 194.0] | 0.11 |
+| Window SQI ≥ 0.4 | 97.8% | 85.5 ms; reduction CI [0.0; 0.0] | Same | 0.11 |
+| In-loop SQI ≥ 0.4, as in app | 97.8% | 85.5 ms; reduction CI [0.00; 0.05] | +89.8 | 0.11 |
+| SQI ≥ 0.96, post hoc | 66.2% | 61.2 ms (50.5–72.6) | | |
+| SQI ≥ 0.97, post hoc | 40.3% | 45.8 ms (38.3–52.7) | | |
+| SQI ≥ 0.98, post hoc, 12 subjects | 10.6% | 23.7 ms (19.3–31.2) | | |
+| Accelerometer at the three matched coverages | 66 / 40 / 11% | 73.9 / 57.8 / 60.3 ms | | |
+| Hypothetical inverted-input systolic timing, ungated | 97.4% | **18.1 ms** (10.0–34.0) | +44.1 [−65.6; 153.8] | 0.06 |
+| Sensor 2 (`pleth_4`), ungated | 95.7% | 110.6 ms | | −0.01 |
 
-Per attività (pipeline dell'app, nessun filtro; tra parentesi il segnale invertito, ipotetico):
-seduto 50,0 ms (4,2), cammino 101,8 ms (41,4), corsa 95,4 ms (33,2).
+By activity, app pipeline ungated (inverted-input variant in parentheses): sitting 50.0 ms (4.2),
+walking 101.8 ms (41.4), running 95.4 ms (33.2).
 
-Osservazioni (tutte da `summary.json`):
+1. **The app threshold rejects no additional finger windows.** Median window SQI is 0.974 sitting,
+   0.962 walking, 0.964 running. In-loop thresholds 0.2, 0.3 and 0.4 behave similarly.
+2. **The amplitude score is 1 in all 491 windows.** Median modulation is 0.35–0.49%, versus full
+   score at 0.02%. The >2% artefact penalty occurs in about 0.2–0.3% of seconds. Variation in SQI
+   is therefore almost entirely periodicity.
+3. **SQI ranks some error within its narrow 0.94–0.98 range.** Thresholds 0.96–0.98 were chosen
+   after inspecting the sweep; these are descriptive operating points. Median ECG RMSSD in retained
+   windows is 22.9/25.0/22.4 ms versus 21.5/20.2/22.3 ms discarded. This check argues against a
+   simple lower-reference-RMSSD explanation; it does not rule out other selection effects.
+4. **Fiducial timing is a major error source.** Raw-light maxima place detected beats near the
+   broad diastolic foot. Medians of recording-level statistics (`fiducial_check.json`): R-to-pulse
+   lag 193 ms, lag IQR **96.8 ms**, **25.1%** unmatched R beats and 2.2% with multiple detections.
+   Inverting the input narrows lag IQR to **24.0 ms**, with 4.0% missed beats. The sitting result
+   also improves markedly. These lags include processing delay and physiology; they are not a
+   direct measurement of pulse transit time. The variant was tested offline, not deployed in the app.
 
-1. **Alla soglia dell'app l'SQI non scarta nessuna finestra.** SQI completo per finestra: mediana
-   0,974 da seduti, 0,962 in cammino, 0,964 in corsa (`windows.csv`). Lo stesso vale nel ciclo con
-   g = 0,2, 0,3 e 0,4.
-2. **Il termine di ampiezza vale 1 in tutte le 491 finestre.** La modulazione mediana è 0,35–0,49%,
-   contro un punteggio pieno allo 0,02%. La penalità artefatti (> 2%) scatta nello 0,2–0,3% dei secondi.
-   Tutta l'informazione dell'SQI viene dalla periodicità.
-3. **L'SQI contiene un po' di segnale, ma solo tra 0,94 e 0,98.** Queste soglie sono state scelte dopo
-   aver visto i dati: è una curva descrittiva, non un punto di lavoro validato. Le finestre tenute non
-   hanno un'HRV vera più bassa di quelle scartate (RMSSD ECG mediano 22,9 / 25,0 / 22,4 ms tenute
-   contro 21,5 / 20,2 / 22,3 ms scartate, per τ = 0,96 / 0,97 / 0,98), quindi il guadagno non viene dal
-   selezionare soggetti con HRV bassa. A pari copertura l'SQI fa meglio del filtro sull'accelerometro.
-4. **La fonte principale dell'errore è il punto fiduciale, non la qualità del segnale.** L'app cerca i
-   massimi del grezzo, che con il MAX30101 cadono sul piede diastolico. Mediane per registrazione
-   (`fiducial_check.json`): ritardo dall'onda R 193 ms con **IQR 96,8 ms**, **25,1%** dei battiti senza
-   picco, 2,2% con picchi multipli. Invertendo il segnale (picco sistolico): IQR **24,0 ms**, 4,0% di
-   battiti persi. Anche da seduti, con segnale pulito, l'errore mediano passa da 50,0 a 4,2 ms. Questa
-   variante **non** è implementata nell'app ed è stata testata solo qui.
+Figure: `results/fig_sqi_tradeoff.png` (also PDF).
 
-Figura: `results/fig_sqi_tradeoff.png` (anche `.pdf`).
+## 6. Terra's public OpenAPI schema
 
-## 6. Terra (schema OpenAPI pubblico)
+`check_terra_schema.sh` produces `results/terra_schema_check.txt`. The saved observation is at
+commit **5944de59e7f2ccb941254c6907d52ebee08d58d8** of `tryterra/openapi`, first checked 2026-09-28 and rechecked during this review.
+`HeartRateDataSample` exposes timestamp, bpm, timer_duration_seconds and context (Not Set / Active /
+Not Active); RMSSD samples expose timestamp and hrv_rmssd; RR samples expose rr_interval_ms,
+timestamp and hr_bpm. The inspected HR/HRV/RR objects have no quality/confidence field. The saved
+keyword search found no quality/confidence/accuracy/reliability/artefact matches in heart-related
+schema files; other matches were in Sleep, SleepLevel, GlucoseData and LabReportArtifactsResponse.
 
-`check_terra_schema.sh` → `results/terra_schema_check.txt`. Repository `tryterra/openapi`, commit
-`9eccc73` del 2026-09-28. `HeartRateDataSample` ha `timestamp`, `bpm`, `timer_duration_seconds`,
-`context` (Not Set / Active / Not Active). `HeartRateVariabilityDataSampleRMSSD` ha `timestamp`,
-`hrv_rmssd`. `RRIntervalSample` ha `rr_interval_ms`, `timestamp`, `hr_bpm`. Nessun file dello schema
-relativo a heart/HRV/RR/ECG contiene "quality", "confidence", "accuracy", "reliab" o "artifact". Le
-uniche occorrenze nello schema sono in Sleep, SleepLevel, GlucoseData e LabReportArtifactsResponse.
+This is a **public schema observation**, not evidence about Terra's internal processing or what
+individual device partners provide. A keyword search also cannot establish the semantics of every
+field. If upstream partners expose beat-quality metadata, preserving it beside normalized biomarkers
+could make downstream audits possible. A platform receiving only summary biomarkers cannot recreate
+the waveform-based template feature used here.
 
-Questo dice cosa c'è **nello schema pubblico**, non come Terra tratta la qualità internamente né cosa
-restituisce in pratica ogni provider.
+The script defaults to the saved commit. Pass another commit explicitly for a new observation;
+network or missing-file failures must not be interpreted as absence of quality fields.
 
-## 7. Limiti
+## 7. Limitations of the initial finger audit
 
-- Un solo dataset: dito, 22 adulti sani, attività di laboratorio, 491 finestre da 60 s. Non sono dati
-  degli occhiali: l'app non salva il grezzo (patch proposta in `../patches/export-raw.patch`).
-- L'SQI è un'**euristica non validata** con soglie tarate a mano sul prototipo nasale. Il termine di
-  ampiezza non si trasferisce a un altro sito: qui è sempre saturo. Secondo il commento in `sqi.dart`,
-  però, anche i PI misurati al naso (0,04–0,07%) sono sopra la soglia dello 0,02%. Probabilmente è
-  saturo anche sugli occhiali, ma non è verificato.
-- Il problema del punto fiduciale potrebbe essere diverso al naso (morfologia dell'onda diversa). Non verificato.
-- Le soglie 0,96–0,98 sono post hoc.
-- Nel formato WFDB il PPG è salvato a 12 bit con guadagno e offset, e lo si decima da 500 a 100 Hz.
-  Rispetto allo stream reale degli occhiali mancano la perdita di pacchetti BLE e il possibile problema
-  della doppia lettura del FIFO (`../docs/PIPELINE_ATTUALE.md` §1).
-- L'RMSSD da PPG è calcolato per finestra, non sul buffer mobile di 60 intervalli dell'app.
-- Il riferimento dipende dalle annotazioni R del dataset. Gli autori segnalano un ECG rumoroso durante
-  il cammino.
+- No glasses recordings: 22 healthy adults, finger placement, laboratory activities, 491 minutes.
+  The original app did not save raw PPG. The separate team project contains a proposed raw-export
+  patch; that patch is not distributed in this audit repository.
+- SQI is an unvalidated heuristic hand-calibrated on the nasal prototype. Its amplitude term
+  saturates here. The original code comments report nasal modulation of 0.04–0.07%, also above
+  the 0.02% full-score threshold, but saturation on the glasses was not measured in this audit.
+- Pulse morphology and the appropriate fiducial may differ at the nose bridge.
+- The 0.96–0.98 thresholds are post hoc.
+- WFDB stores PPG at 12-bit resolution with gain/offset, then it is decimated to 100 Hz. BLE packet
+  loss and the possible duplicate FIFO read described in `../docs/PIPELINE_ATTUALE.md` §1 are absent.
+- The initial window RMSSD analysis is not the app's rolling 60-interval calculation. Section 11
+  evaluates the rolling application output separately.
+- ECG annotations are the reference, not infallible timing truth; the dataset authors note noisy
+  ECG during walking.
 
-## 8. Seconda analisi: fronte, vita reale (WildPPG)
+## 8. Second analysis: forehead in daily life (WildPPG)
 
-Aggiunta dopo la restituzione degli occhiali, per avere un sito sulla testa.
+Added after the glasses were returned, to inspect a head site.
 
-**Dataset.** WildPPG (Meier, Demirel, Holz, NeurIPS 2024 D&B; dati **CC BY-NC-SA 4.0**, uso non
-commerciale). PPG riflessivo alla fronte (MAX86141; verde 530, rosso 660, IR 950 nm), ECG Lead I allo
-sterno, accelerometro, tutto a 128 Hz, circa 12 ore di vita reale per persona (escursioni, trasporti,
-pasti, riposo).
-- Il grezzo completo pesa 19,6 GB (16 file). Per restare sotto la soglia di ~3 GB ho scaricato solo i
-  2 file più piccoli: partecipanti `an0` ed `e61`, 2,2 GB. Ho estratto i canali usati in
-  `data/wildppg/*.npz` e cancellato il grezzo. `./download_wildppg.sh all` li scarica tutti.
-- La versione su Hugging Face (632 MB) contiene finestre pre-elaborate e HR, **senza** l'ECG: non
-  serve per l'HRV.
+**Dataset.** Meier, Demirel and Holz, *WildPPG: A Real-World PPG Dataset of Long Continuous
+Recordings*, NeurIPS 2024 Datasets and Benchmarks. Data: CC BY-NC-SA 4.0, non-commercial.
+Forehead reflectance PPG (MAX86141, green 530/red 660/IR 950 nm), sternum Lead-I ECG and ACC,
+all at 128 Hz, roughly 12 hours per person during hiking, transport, meals and rest.
 
-**Polarità (inferita, non dichiarata dagli autori).** WildPPG salva il PPG in polarità volume. Evidenze
-in `results/wildppg_polarity.json`: l'onda media ha il massimo 336–367 ms (IR) e 273–320 ms (verde) dopo l'onda R; nel verde la
-pendenza più ripida è la salita (rapporto pendenza +/− 1,74–1,81, contro 0,19–0,61 del grezzo
-MAX30101 di PTT-PPG); il codice ufficiale passa `ppg_g.v` così com'è al toolbox *ppg-beats*, che si
-aspetta la polarità volume. Per simulare l'app l'IR viene quindi **invertito** (run `app`); l'IR così
-com'è corrisponde alla variante col picco sistolico (run `systolic`).
+- Full raw data: 16 files, 19.6 GB. This initial experiment used the two smallest participants,
+  `an0` and `e61` (2.2 GB transfer). Required channels were extracted to NPZ and raw MAT files deleted.
+  `download_wildppg.sh all` downloads all 16; `run_wildppg.py` defaults explicitly to the original two.
+- The smaller Hugging Face derivative has preprocessed windows and HR but lacks ECG, so it cannot
+  provide the RMSSD reference needed here.
 
-**Unità.** Il PPG è in frazione del fondo scala dell'ADC; viene moltiplicato per 4096 solo per dare un
-senso alla soglia di presenza di 10 nA dell'SQI. Tutto il resto è indipendente dalla scala.
+**Polarity: inferred, not documented by the authors.** ECG-aligned IR maxima occur 336–367 ms
+post-R and green maxima 273–320 ms post-R. Green rising/falling slope ratios are 1.74–1.81, versus
+0.19–0.61 for PTT-PPG raw MAX30101 data. Official WildPPG code passes green PPG unchanged to
+*ppg-beats*, which expects volume polarity. Hence IR is inverted for the app/light-polarity run;
+uninverted IR corresponds to systolic timing. Evidence: `wildppg_polarity.json`.
 
-**Riferimento.** Picchi R rilevati con `ecg_rpeaks.py` (stile Pan–Tompkins, rifinitura sub-campione).
-Validazione su PTT-PPG con l'ECG ricampionato a 128 Hz (`results/rpeak_validation.json`): sensibilità
-e PPV mediane 1,0 (minimo 0,94), errore di temporizzazione mediano 1,6 ms. Con la pulizia RR (esclusi
-gli RR a più del 20% dalla mediana di 11 intervalli), l'RMSSD di riferimento differisce da quello
-manuale di 0,19 ms in mediana (90° percentile 0,66 ms). Su WildPPG sono escluse le finestre con più
-del 10% di RR scartati: restano 1343 finestre su 1479.
+**Units.** ADC full-scale fraction is multiplied by 4096 to make the 10 nA presence threshold
+operational. This is an assumed nA-equivalent scale, not a recovered physical sensor range.
+Other SQI terms and timing are scale-free.
 
-**Risultati** (`results/wildppg_summary.json`; IC 95% con bootstrap a blocchi di 10 minuti dentro la
-persona). RMSSD vero mediano **14,8 ms** (IQR 10,4–20,8).
+**Reference and validation scope.** The Pan–Tompkins-style R detector has sub-sample refinement.
+It was benchmarked on **PTT-PPG ECG resampled to 128 Hz**, not on manually annotated WildPPG ECG:
+median sensitivity and PPV 1.0 (minima about 0.94), pooled median absolute matched-beat timing
+error **1.57 ms**. Detected-and-cleaned RMSSD versus the manual PTT-PPG reference differs by
+**0.19 ms** in median, 0.66 ms at the 90th percentile. Both-cleaned comparison: 0.18 ms median.
+Cleaning rejects RR more than 20% from the surrounding 11-interval median. WildPPG windows with
+>10% rejected RR are excluded, leaving 1,343 of 1,479 windows. WildPPG detector accuracy itself
+is not directly annotated and remains a limitation; passing this screen does not prove reference accuracy.
 
-| Condizione | Finestre tenute | Errore ass. mediano (IC 95%) |
+**Results** (`wildppg_summary.json`). Median ECG RMSSD **14.8 ms**, IQR 10.4–20.8.
+CIs use resampled 10-minute participant-specific blocks, describing these two recordings rather
+than uncertainty across a population of participants. Coverage denominator is the 1,343 screened ECG windows.
+
+| Condition | Retained | Median absolute error (95% CI) |
 |---|---|---|
-| App (IR, polarità luce), nessun filtro | 67,2% | **136,1 ms** (128,5–144,0); bias +141,7; r = 0,12 |
-| + SQI ≥ 0,4 per finestra | 39,2% | 130,3 ms; riduzione IC [−1,6; 10,5] |
-| Finestre scartate da SQI ≥ 0,4 | 28,0% | 140,2 ms |
-| + SQI ≥ 0,4 nel ciclo (come l'app) | 40,4% | 125,2 ms; riduzione IC [3,5; 15,6] |
-| SQI ≥ 0,96 / 0,97 *(post hoc)* | 14,0% / 4,6% | 115,2 / 96,7 ms |
-| Filtro accelerometro, stessa copertura | 14,0% / 4,6% | 137,4 / 114,2 ms |
-| Stesso run ricampionato a 100 Hz | 66,3% | 134,7 ms |
-| *Non nell'app*: IR col picco sistolico | 64,3% | 113,7 ms (103,7–121,3) |
-| Verde, polarità luce | 89,4% | 109,0 ms |
+| App IR light polarity, ungated | 67.2% | **136.1 ms** (128.5–144.0); bias +141.7, r = 0.12 |
+| Window SQI ≥ 0.4 | 39.2% | 130.3 ms; reduction CI [−1.6; 10.5] |
+| Discarded by that SQI gate | 28.0% | 140.2 ms |
+| In-loop SQI ≥ 0.4 | 40.4% | 125.2 ms; reduction CI [3.5; 15.6] |
+| SQI ≥ 0.96 / 0.97, post hoc | 14.0% / 4.6% | 115.2 / 96.7 ms |
+| Accelerometer at matched coverage | 14.0% / 4.6% | 137.4 / 114.2 ms |
+| App run resampled to 100 Hz | 66.3% | 134.7 ms |
+| Systolic IR timing, offline | 64.3% | 113.7 ms (103.7–121.3) |
+| Green, light polarity | 89.4% | 109.0 ms |
 
-Osservazioni:
-- A differenza del dito, qui l'SQI **scatta**. La modulazione mediana è 2,45% (`an0`) e 4,46% (`e61`),
-  quindi la penalità artefatti è attiva nel 56% e 68% dei secondi e l'SQI di finestra mediano è 0,47 e
-  0,0. Scarta molte finestre ma non quelle sbagliate: 130 ms nelle tenute contro 140 ms nelle scartate,
-  circa 9 volte l'RMSSD vero in entrambi i casi.
-- Il **canale IR alla fronte porta poco battito** (`results/wildppg_channel_check.json`). Nel 20% di
-  finestre più ferme, l'HR spettrale coincide con l'ECG (±5 bpm) nel 30,2% e 4,6% dei casi (IR) contro
-  75,5% e 56,2% (verde). Anche il caso migliore per il rilevatore dell'app (verde, picco sistolico) dà
-  69,0 e 62,8 ms su tutte le finestre e 62,5 e 54,1 ms su quelle ferme.
-- Picchi rispetto all'onda R (run `app`): battiti persi 49,3% e 60,6%, IQR del ritardo 607 e 435 ms.
+- Here the SQI gate activates: median modulation 2.45%/4.46%; penalties in 56%/68% of seconds;
+  median SQI 0.47/0.0. It rejects many windows but leaves large error: retained 130 ms versus
+  discarded 140 ms, both far above the ECG RMSSD scale.
+- IR carries weak usable pulse information in this check (`wildppg_channel_check.json`). In the
+  quietest 20% of windows, spectral HR agrees with ECG within ±5 bpm in 30.2%/4.6% of IR windows,
+  versus 75.5%/56.2% for green. Even green systolic timing has median error 69.0/62.8 ms overall
+  and 62.5/54.1 ms in quiet windows.
+- App-run missed beats: 49.3%/60.6%; R-to-detection lag IQR 607/435 ms.
 
-**Limiti specifici.** Solo 2 persone su 16: gli IC descrivono la variabilità dentro queste due persone,
-non tra persone. La polarità è inferita. Il riferimento è automatico, anche se validato. Licenza non
-commerciale.
+**Specific limits:** two participants here, inferred polarity, automatic ECG reference with validation
+only on another dataset, different chip and anatomical site from the glasses, non-commercial data licence.
 
-## 9. Il filtro era sbagliato, o nessun filtro aiuta? (prove 1 e 2)
+## 9. Was the gate wrong, or can no gate help? Experiments 1 and 2
 
-**v2 (non è nell'app).** È la stessa pipeline, con un'unica modifica: il rilevatore lavora sul segnale
-filtrato cambiato di segno, quindi colloca il battito sul picco sistolico invece che sul piede
-(`app_pipeline.py`, `PpgProcessor(systolic=True)`). La v1 resta identica all'app (test invariati); la
-v2 ha 3 test propri. Risultati senza filtro: dito 18,1 ms (bias +43,8 ms, r = 0,06: pochi errori molto
-grandi durante il movimento), fronte 113,7 ms. Sono uguali alla variante col segnale invertito usata prima.
+**v2 is offline only.** `PpgProcessor(systolic=True)` negates the filtered detector input; the
+filter and SQI input stay unchanged. v1 equivalence tests remain. Ungated v2 error: finger 18.1 ms
+(bias +43.8 ms, r = 0.06, reflecting some very large movement errors), forehead 113.7 ms in the
+initial two-person sample. Rounded median errors match the earlier inverted-input experiment;
+that earlier variant has slightly different bias/limits and is not numerically identical throughout.
 
-**Prova 1 — oracolo** (`results/oracle_check.json`, `results/fig_oracle.png`). Ordino le finestre per
-errore vero (serve l'ECG, quindi è irraggiungibile) e tengo le migliori: è il massimo che un filtro può
-fare. Errore mediano tenendo il 50% delle finestre:
+**Experiment 1: oracle** (`oracle_check.json`, `fig_oracle.png`). Rank windows by ECG error and
+retain the best. This is an unattainable error-ranking ceiling, not a deployable gate. At 50% of
+ECG-reference windows:
 
-| | Oracolo | SQI app | Solo periodicità | Accelerometro | Senza filtro | Finestre buone (≤ 5 ms) |
+| Dataset/pipeline | Oracle | App SQI | Periodicity | ACC | Ungated | Good ≤5 ms, among calculable windows |
 |---|---|---|---|---|---|---|
-| Dito, v1 (app) | 48,4 | 50,6 | 50,6 | 62,2 | 85,5 | 1,2% |
-| Dito, v2 (picco sistolico) | 5,5 | 8,3 | 8,3 | 6,0 | 18,1 | 23,6% |
-| Fronte, v1 (app) | 120,7 | 133,2 | 132,0 | 138,1 | 136,1 | 0% |
-| Fronte, v2 (picco sistolico) | 96,5 | 109,0 | 109,6 | 109,9 | 113,7 | 0,1% |
+| Finger v1 | 48.4 | 50.6 | 50.6 | 62.2 | 85.5 | 1.2% |
+| Finger v2 | 5.5 | 8.3 | 8.3 | 6.0 | 18.1 | 23.6% |
+| Forehead v1, two participants | 120.7 | 133.2 | 132.0 | 138.1 | 136.1 | 0% |
+| Forehead v2, two participants | 96.5 | 109.0 | 109.6 | 109.9 | 113.7 | 0.1% |
 
-- Sul dito l'SQI, **usato come classifica**, è quasi al livello dell'oracolo: il difetto era la soglia 0,4.
-- Con la v1 nemmeno un filtro perfetto scende sotto ~48 ms tenendo metà dei dati, perché le finestre
-  buone quasi non esistono. Alla fronte non esistono affatto.
-- Sul dito il termine di ampiezza vale sempre 1, quindi SQI completo e sola periodicità danno la
-  stessa classifica.
+Finger v1 SQI ranking is close to the oracle at this coverage; its 0.4 threshold is ineffective.
+Even oracle selection leaves about 48 ms error in v1 at half coverage. On the finger, amplitude
+saturation makes full SQI and periodicity rankings equal. Ranking cannot create accurate windows
+where the beat series rarely supplies them.
 
-**Prova 2 — soglie tarate in modo onesto** (`results/sqi_calibration.json`).
-- *Dito*: 200 divisioni casuali in 11 persone di taratura e 11 di test. La soglia è scelta sulla metà di
-  taratura per tenere il 75/50/25% dei dati, poi applicata così com'è alla metà di test.
-- *Fronte*: taratura su un partecipante, test sull'altro.
-- *Trasferimento*: soglie tarate sul dito e applicate alla fronte.
+**Experiment 2: thresholds calibrated on different people** (`sqi_calibration.json`).
+Finger: 200 random 11-person calibration / 11-person test splits. Thresholds aim to retain
+75/50/25% of calibration windows, then apply unchanged to test subjects. Forehead: each of the
+initial two participants calibrates the other. Transfer: calibrate on finger, test on forehead.
 
-Dito, v2, sulle persone di test (mediana [2,5°–97,5° percentile] sulle 200 divisioni; senza filtro 18,0 ms):
+Finger v2 test results: median [2.5th–97.5th percentile] across splits, not a confidence interval
+for a single fitted model. Ungated median across splits: 18.0 ms.
 
-| Obiettivo | Filtro | Dati tenuti | Errore | Oracolo alla stessa copertura |
+| Target | Gate | Retained | Error (ms) | Oracle at realized coverage |
 |---|---|---|---|---|
-| 50% | SQI (= periodicità) | 50% [28–76] | **8,5 ms** [5,7–11,9] | 5,5 |
-| 50% | Accelerometro | 50% [40–61] | **6,0 ms** [4,3–11,9] | 5,5 |
-| 25% | SQI | 25% [10–45] | 7,6 ms [4,9–11,4] | 3,1 |
-| 25% | Accelerometro | 24% [11–33] | 3,7 ms [2,3–5,4] | 2,7 |
-| 75% | SQI | 74% [50–92] | 10,0 ms [7,7–16,5] | 9,1 |
-| 75% | Accelerometro | 75% [63–88] | 11,9 ms [6,2–28,3] | 9,3 |
+| 50% | SQI / periodicity | 50% [28–76] | 8.5 [5.7–11.9] | 5.5 |
+| 50% | ACC | 50% [40–61] | 6.0 [4.3–11.9] | 5.5 |
+| 25% | SQI | 25% [10–45] | 7.6 [4.9–11.4] | 3.1 |
+| 25% | ACC | 24% [11–33] | 3.7 [2.3–5.4] | 2.7 |
+| 75% | SQI | 74% [50–92] | 10.0 [7.7–16.5] | 9.1 |
+| 75% | ACC | 75% [63–88] | 11.9 [6.2–28.3] | 9.3 |
 
-- **Con la v2 e una soglia tarata, il filtro funziona anche su persone mai viste**: tenendo metà dei
-  dati l'errore si dimezza (da 18 a 8,5 ms con l'SQI, 6,0 con l'accelerometro). L'accelerometro è più
-  vicino all'oracolo e la copertura che ottiene varia meno tra le divisioni; la soglia dell'SQI si
-  trasferisce meno bene tra persone (coverage 28–76%).
-- Con la v1 tarata: 50,7 ms al 50% (senza filtro 84,4), cioè ancora più di 2 volte il valore vero.
-- *Fronte*: le soglie non si trasferiscono tra i due partecipanti. Tarate su `e61`, su `an0` non scartano
-  nulla; tarate su `an0`, su `e61` tengono meno dati del previsto. Gli errori restano tra 80 e 146 ms.
-- *Dal dito alla fronte*: le soglie del dito (0,95–0,985) tengono solo l'1–14% delle finestre della
-  fronte, con errori di 39–75 ms. **Una soglia non si trasferisce tra siti.**
+After correcting timing, these gates lower error on held-out subjects at a coverage cost. ACC is
+competitive in this laboratory mix; SQI's realized coverage varies widely across splits. v1 remains
+poor: calibrated median error 50.7 ms at the 50% target, versus 84.4 ms ungated across splits.
+Forehead thresholds transfer poorly between the two participants: calibrating on `e61` rejects
+nothing on `an0`, while the reverse keeps less than intended; errors remain 80–146 ms. Finger SQI
+thresholds 0.95–0.985 retain only 1–14% of forehead windows, with errors 39–75 ms.
 
-**Conclusione.** Il filtro dell'app era tarato male (soglia 0,4), ma non era il problema principale.
-Prima va corretto il punto in cui si colloca il battito. Dopo, un filtro tarato su un riferimento
-dimezza l'errore al prezzo di metà dei dati, e in laboratorio un semplice accelerometro fa almeno
-altrettanto bene. Alla fronte, nella vita reale, nessun filtro basta con questi dati.
+The threshold was a problem, but fiducial timing was the larger finger failure. No tested gate
+makes these free-living forehead estimates sufficiently accurate.
 
-## 10. Quale segnale riconosce meglio i minuti buoni? ML, incertezza, explainability
+## 10. Which signals identify useful windows? Quality models, uncertainty and robustness
 
-Si parte dalla v2. Per ogni minuto si calcolano 24 feature **senza ECG** (`features.py`):
-- l'SQI dell'app e le sue parti;
-- statistiche sui battiti: trovati, scartati, stima dei persi, salti tra intervalli;
-- somiglianza di ogni battito al battito medio (correlazione col template);
-- forma d'onda: skewness, curtosi, purezza spettrale;
-- accelerometro.
+Starting from v2, `features.py` extracts **24 ECG-free candidate features**: SQI/components;
+detected and accepted beat counts, rejection/missed-beat proxies and interval changes;
+beat-template similarity; skewness/kurtosis/spectral features; and accelerometry. Eight single
+features are compared explicitly, alongside multifeature models; not all 24 receive a standalone ranking.
+ECG enters label construction outside `window_features`, never its inputs. “Good” means absolute
+RMSSD error ≤5 ms, an audit threshold rather than a clinical tolerance.
 
-L'ECG serve solo per l'etichetta, cioè l'errore RMSSD del minuto; "buono" = errore ≤ 5 ms.
-La fronte ora usa **tutti i 16 partecipanti** di WildPPG, scaricati e cancellati un file alla volta:
-12.998 minuti, 10.945 con riferimento ECG affidabile. Con la v1 l'errore mediano è 106,1 ms, con la v2
-89,2 ms (RMSSD vero mediano 21,3 ms); i minuti buoni con la v2 sono il 3,2%.
+The template is the pointwise **median** of demeaned −0.25 to +0.45 s pulse segments around detected
+systolic peaks; each segment's normalized correlation is computed against that same window's template.
+The mean correlation is the feature. A beat contributes to its own template: this is unsupervised
+within-window self-inclusion, not ECG leakage, and can inflate similarity. At least five complete
+segments are required; a repeated artefact can also look consistent.
 
-**Valutazione.** Leave-one-subject-out: il punteggio di ogni persona viene da un modello allenato
-sulle altre. Per le feature singole anche la direzione (più alto = meglio o peggio) è scelta sulle
-altre persone. Le metriche sono:
-- **AURC**, la media dell'errore mediano sulla curva errore–dati tenuti (10–100%): più basso è meglio;
-- **gap chiuso**, cioè quanto della distanza tra "nessun filtro" e oracolo viene recuperata;
-- **AUROC** su "buono".
+**Count-feature correction during review.** The former `reject_frac = 1 − n_accepted/(n_peaks−1)`
+could be negative: accepted intervals are assigned by their closing packet and can start before the
+window. It is now a bounded count proxy, `clip(1 − n_accepted/max(n_peaks,1), 0, 1)`, or 1 with no
+peaks. Peak positions precede decision packets by one sample, so it is not an exact decision-level
+rejection rate. The saved counts permit this correction without reconstructing raw beats. All other
+CSV fields were preserved; dependent models, uncertainty outputs and figures were rerun. The exact
+rejected-decision fraction would require re-extracting per-beat decisions from raw recordings.
 
-Gli IC sono calcolati con bootstrap per persona. Risultati in `results/quality_models.json` e
-`results/fig_quality_models.png`.
+This stage uses **all 16 WildPPG participants**: 12,998 non-overlapping minutes, 10,945 passing the
+ECG reference screen. v1 median error 106.1 ms, v2 89.2 ms; median ECG RMSSD 21.3 ms. Of calculable
+v2 forehead windows, 3.2% meet the 5 ms threshold.
 
-| | Dito: AURC (gap chiuso) | Dito: errore al 50% | Dito: AUROC | Fronte: AURC (gap chiuso) | Fronte: errore al 25% | Fronte: AUROC |
+**Subject separation and evaluation.** For each held-out subject, `quality_models.fit_score`
+fits the imputer/scaler/logistic or seeded GBM only on labelled windows from other subjects.
+Single-feature direction is chosen from those other subjects' error correlations. Cross-site
+models fit only the source dataset. Stress display thresholds use other subjects' features, and
+conformal train/calibration/test subject sets are disjoint. The held-out subject's ECG error is not
+used to fit its direction, model, threshold or conformal calibration. ECG screening defines which
+windows can be evaluated; it is not itself an available deployment-time quality signal.
+
+This separation does **not** remove study-level feature selection bias: candidate design and the
+choice of template consistency for the narrative used these two datasets. Cross-site checks are
+robustness analyses, not independent external confirmation. Freeze the method before a third dataset.
+
+The quality curves sort held-out scores together and retain the top k calculable windows. They
+measure retrospective ranking at a chosen coverage, not the behavior of a fixed deployable threshold.
+Coverage denominator is all screened ECG-reference windows (491 finger / 10,945 forehead), so
+curves stop when calculable windows run out. The nonstandard AURC here is the arithmetic mean of
+**median absolute error** at available 5-percentage-point coverages from 10% upward. It is not a
+standard classification-risk integral. Gap closed is `(ungated AURC − method AURC)/(ungated − oracle)`.
+AUROC and average precision assess the ≤5 ms label. Subject-bootstrap CIs resample saved out-of-fold
+scores, without refitting models or repeating feature selection; they do not capture all selection uncertainty.
+
+<!-- BEGIN QUALITY_TABLE -->
+| Method | Finger AURC (gap closed) | Error at 50% | AUROC | Forehead AURC (gap closed) | Error at 25% | AUROC |
 |---|---|---|---|---|---|---|
-| Nessun filtro | 18,1 | 18,1 | — | 89,2 | 89,2 | — |
-| Oracolo (serve l'ECG) | 6,9 (100%) | 5,5 | — | 48,8 (100%) | 29,4 | — |
-| Gradient boosting, tutte le feature | 7,1 (98%) | 5,5 | 0,96 | **49,6 (98%)** | 30,9 | 0,98 |
-| Regressione logistica | 7,2 (97%) | 5,7 | 0,94 | 51,8 (92%) | 32,5 | 0,97 |
-| Somiglianza tra battiti (da sola) | **7,0 (99%)** | 5,5 | 0,97 | 53,3 (89%) | 33,7 | 0,96 |
-| Quota di battiti scartati | 7,4 (96%) | 5,6 | 0,90 | 53,4 (89%) | 34,9 | 0,95 |
-| Accelerometro | 8,1 (89%) | 6,0 | 0,88 | 82,8 (16%) | 81,2 | 0,62 |
-| **SQI dell'app** | 9,4 (78%) | 8,3 | 0,68 | 71,0 (45%) | 58,9 | **0,39** |
+| Ungated | 18.1 | 18.1 | — | 89.2 | 89.2 | — |
+| Oracle (ECG) | 6.9 (100%) | 5.5 | — | 48.8 (100%) | 29.4 | — |
+| Gradient boosting | 7.1 (98%) | 5.5 | 0.96 | 49.6 (98%) | 30.9 | 0.98 |
+| Logistic regression | 7.2 (97%) | 5.7 | 0.94 | 51.8 (93%) | 32.4 | 0.97 |
+| Beat-template correlation | 7.0 (99%) | 5.5 | 0.97 | 53.3 (89%) | 33.7 | 0.96 |
+| Rejection count proxy | 7.6 (93%) | 5.6 | 0.84 | 53.3 (89%) | 34.8 | 0.95 |
+| Accelerometer | 8.1 (89%) | 6.0 | 0.88 | 82.8 (16%) | 81.2 | 0.62 |
+| App SQI | 9.4 (78%) | 8.3 | 0.68 | 71.0 (45%) | 58.9 | 0.39 |
+<!-- END QUALITY_TABLE -->
 
-- Sul dito basta **una feature**, la somiglianza tra battiti, per arrivare quasi all'oracolo; il
-  vantaggio sull'SQI è significativo (AURC, IC del miglioramento +1,2…+4,5 ms). I modelli di ML non
-  aggiungono nulla.
-- Alla fronte, nella vita reale, il **gradient boosting** è il migliore (98% del gap; miglioramento
-  sull'SQI +10,0…+33,7 ms). L'SQI dell'app ha AUROC 0,39, peggio del caso. L'accelerometro, utile in
-  laboratorio, qui non serve.
-- **Trasferimento tra siti**: allenato solo sul dito e applicato alla fronte, il gradient boosting ha
-  AURC 49,9 (contro 49,6 allenato sulla fronte); al contrario 7,1 (contro 7,1). Conta la
-  **classifica**, non una soglia fissa, ed è per questo che si trasferisce.
-- **Limite dei dati**: alla fronte anche l'oracolo, tenendo un quarto dei minuti, ha un errore
-  mediano di 29 ms.
-- **Bias di selezione**: sul dito i minuti tenuti al 50% hanno HRV vera più alta (25,8 contro 19,6 ms
-  per la somiglianza tra battiti, 26,5 contro 19,1 anche per l'oracolo), perché sono quelli da seduti.
-  Una HRV filtrata va interpretata sapendo che rappresenta di più il riposo. Alla fronte l'effetto è
-  piccolo (20,7 contro 23,4 ms).
+Template correlation is a strong interpretable candidate in this audit, particularly on finger data.
+Model rankings and their corrected values are shown above; a small numerical lead does not establish
+universal superiority. On the forehead, even the oracle at 25% coverage leaves about 29 ms error.
 
-**Incertezza: conformal prediction** (`results/conformal.json`, `results/fig_conformal.png`). Per ogni
-minuto si costruisce l'intervallo RMSSD ± q·σ(x), con σ(x) = errore previsto dal gradient boosting
-+ 1 ms (intervallo *adattivo*), confrontato con un intervallo a larghezza fissa. Obiettivo: copertura
-del 90%. Il modello è allenato su 2/3 delle altre persone e tarato sul restante terzo; la persona di
-test non viene mai usata (20 ripetizioni).
+Selection changes the population represented: at 50% finger coverage, template-selected windows
+have median ECG RMSSD 25.8 ms versus 19.6 ms discarded (oracle: 26.5 versus 19.1). Rest is represented
+more strongly. Forehead selection shifts this less (20.7 versus 23.4 ms at 50% in the quality-model check).
+Cross-site GBM results are reported in `quality_models.json`; transferring a ranking differs from
+transferring an absolute threshold and does not imply that either anatomical site validates the glasses.
 
-| | Dito | Fronte |
+**Uncertainty: split conformal** (`conformal.json`, `fig_conformal.png`). The interval is
+PPG RMSSD ± q·σ(x); σ(x) is a GBM absolute-error prediction (fit on log(1+error), then transformed
+back) plus 1 ms. Compare adaptive and constant-width intervals. For each held-out subject, split
+other subjects roughly 2/3 training and 1/3 calibration, repeating 20 times. The finite-sample
+quantile includes the infinite (n+1)th score when calibration is too small.
+
+<!-- BEGIN CONFORMAL_TABLE -->
+| RMSSD interval metric | Finger | Forehead |
 |---|---|---|
-| Copertura complessiva, adattivo / fisso | 89,4% / 88,0% | 89,3% / 89,3% |
-| Larghezza mediana, adattivo / fisso | 58 / 263 ms | 223 / 341 ms |
-| Persone con copertura < 80%, adattivo / fisso | 3 su 22 (min 45%) / 6 su 22 | 3 su 16 (min 63%) / 2 su 16 |
-| Solo intervalli ≤ 20 ms: minuti tenuti, errore, copertura | 24,9%, 3,3 ms, 83% | 2,6%, 3,4 ms, 88% |
-| Tarato sull'altro sito, adattivo / fisso | 89,1% / 96,2% | 89,5% / **68,1%** |
+| Pooled coverage, adaptive / constant | 89.4% / 88.0% | 89.3% / 89.3% |
+| Median width, adaptive / constant | 58 / 263 ms | 223 / 341 ms |
+| Subjects below 80%, adaptive / constant | 3 / 6 (adaptive minimum 44%) | 3 / 2 (adaptive minimum 63%) |
+| Width ≤20 ms: retained labelled windows; error; coverage | 24.8%; 3.3 ms; 83% | 2.6%; 3.4 ms; 88% |
+| Calibrate on other site: adaptive / constant coverage | 89.2% / 96.2% | 89.5% / 68.1% |
+<!-- END CONFORMAL_TABLE -->
 
-- La garanzia **in media** regge, anche cambiando sito, ma solo con l'intervallo adattivo: quello fisso,
-  tarato sul dito e usato sulla fronte, scende al 68%.
-- **Per singola persona** non è garantita: alcune restano sotto l'80%.
-- Gli intervalli stretti coprono meno del 90%: garanzia marginale ≠ garanzia condizionale.
-- Alla fronte gli intervalli sono onesti ma molto larghi (mediana 223 ms su un RMSSD di 21 ms):
-  l'incertezza è reale, non un difetto del metodo.
+The procedure **targets 90% marginal coverage under exchangeability**. Similar pooled empirical
+coverage does not verify that assumption: within-person temporal dependence, unequal recording
+lengths and new-subject/domain shifts matter. There is no per-person, post-selection or clinical
+reliability guarantee. The width-based selective denominator is calculable labelled windows,
+with each test window repeated across calibration splits. Narrow intervals can under-cover;
+forehead intervals are often much wider than the underlying ECG RMSSD.
 
-**Explainability: SHAP** (`results/explain.json`, `results/fig_shap.png`). È il modello dell'errore
-allenato su tutti i dati, solo a scopo di spiegazione.
-- *Dito*: domina la somiglianza tra battiti (|SHAP| medio 0,66), poi la stima RMSSD stessa (0,25),
-  l'energia dell'accelerometro a 1–5 Hz e i salti tra intervalli.
-- *Fronte*: domina la stima RMSSD (0,43; più è alta, più il modello prevede errore, perché gli errori
-  gonfiano l'RMSSD), poi il salto massimo tra intervalli (0,19) e la somiglianza tra battiti.
-- *Importanza ≠ necessità*: senza la stima RMSSD il modello ottiene la stessa AURC (49,7 contro 49,6
-  alla fronte, 7,1 contro 7,1 sul dito), perché l'informazione c'è anche nei salti tra intervalli. SHAP
-  distribuisce il merito tra feature correlate.
-- La logistica dà lo stesso quadro: sul dito i coefficienti più grandi sono la somiglianza tra battiti,
-  alla fronte i salti tra intervalli e i battiti persi.
+**SHAP** (`explain.json`, `fig_shap.png`). The explanation model is fitted on all labelled data;
+its SHAP values are descriptive, not held-out performance evidence. Template similarity is important
+on finger data; the estimate itself and interval changes are important on forehead data. Removing
+`ppg_rmssd` alone leaves correlated interval-derived information, so SHAP importance is not necessity.
+The logistic coefficients provide a second descriptive view. Updated magnitudes are in the saved JSON.
 
-**Controlli di robustezza** (`robustness_quality.py` → `results/robustness_quality.json`; figura del
-brief `results/fig_tracking.png`). Usano i punteggi leave-one-subject-out appena descritti.
-- *Dentro l'attività (dito)*: la somiglianza tra battiti recupera il 98% del guadagno dell'oracolo anche
-  dentro una sola attività (mediana su seduto, cammino e corsa); l'accelerometro solo il 28%. Il suo buon
-  risultato complessivo veniva dal separare "seduto" da "in movimento".
-- *Dentro la persona (fronte)*: gradient boosting 99%, somiglianza tra battiti 80%, SQI 59%, accelerometro 35%.
-- *Circolarità*. L'etichetta è |RMSSD_ppg − RMSSD_ecg|; alla fronte, nel minuto mediano, il 79% della
-  stima è errore (Spearman errore–stima 0,92). Un filtro senza modello che tiene i minuti con la stima più
-  bassa recupera il 96% del guadagno dell'oracolo, quasi come il gradient boosting.
-- *Criterio "i valori tenuti seguono la verità"* (Spearman tra RMSSD PPG ed ECG nei minuti tenuti, IC 95%
-  con bootstrap per persona; si tiene il 50% sul dito e il 25% alla fronte):
+**Robustness checks** (`robustness_quality.json`, `fig_tracking.png`) use held-out scores.
+Within each finger activity, template similarity retains useful error ranking whereas ACC's pooled
+success largely reflects separation of rest from movement. Within-person forehead checks test
+whether rankings distinguish windows within a day, not just participants with different signal quality.
+Threshold sensitivity includes ≤5/10/20 ms labels, and average precision supplements AUROC for rare good windows.
 
-| | Dito | Fronte |
+**Circularity / low-estimate control.** The target contains the estimate: `|RMSSD_PPG − RMSSD_ECG|`.
+When ECG RMSSD is relatively low, simply preferring low PPG estimates can reduce absolute error
+without preserving physiological tracking. `ppg_rmssd_low` tests this explicitly. SHAP's reliance
+on the estimate motivated the check; SHAP does not prove circularity. `gbm_signal_only` removes
+RMSSD and selected interval-variability features, but still includes HR/count-related features;
+its legacy name must not be read as “independent of all beat information.”
+
+<!-- BEGIN TRACKING_TABLE -->
+| Retained-value tracking (Spearman; 95% CI) | Finger, 50% | Forehead, 25% |
 |---|---|---|
-| Nessun filtro | 0,08 (−0,17…0,34) | 0,20 (0,04…0,35) |
-| Somiglianza tra battiti | **0,63** (0,15…0,90) | **0,50** (0,20…0,70) |
-| Quota di battiti scartati | 0,47 | 0,52 (0,26…0,70) |
-| Gradient boosting, tutte le feature | 0,70 (0,29…0,91) | 0,44 (0,19…0,65) |
-| Gradient boosting senza feature derivate dagli RR | 0,61 | 0,43 |
-| Tieni le stime più basse (nessun modello) | 0,52 (0,07…0,70) | **0,20** (0,03…0,38) |
-| Accelerometro | 0,41 | 0,15 |
-| SQI dell'app | 0,19 (−0,18…0,50) | 0,36 (0,16…0,50) |
-| Oracolo | 0,82 | 0,70 |
+| Ungated | 0.08 (-0.17…0.34) | 0.20 (0.04…0.35) |
+| Beat-template correlation | 0.63 (0.15…0.90) | 0.50 (0.20…0.70) |
+| Rejection count proxy | 0.45 (0.11…0.76) | 0.52 (0.26…0.70) |
+| Gradient boosting | 0.70 (0.28…0.91) | 0.45 (0.19…0.65) |
+| GBM excluding selected RR-variability features | 0.59 (0.21…0.91) | 0.43 (0.14…0.65) |
+| Keep lowest estimates | 0.52 (0.07…0.70) | 0.20 (0.03…0.38) |
+| Accelerometer | 0.41 (0.07…0.65) | 0.15 (-0.02…0.38) |
+| App SQI | 0.19 (-0.18…0.50) | 0.36 (0.16…0.50) |
+| Oracle | 0.82 (0.38…0.93) | 0.70 (0.42…0.83) |
+<!-- END TRACKING_TABLE -->
 
-- Differenza somiglianza tra battiti − "tieni le stime più basse": dito −0,03…0,32 (non significativa),
-  fronte **0,10…0,42**. Differenza somiglianza tra battiti − SQI: dito **0,18…0,71**, fronte −0,07…0,35.
-- PR-AUC per "buono" (≤ 5 ms), più onesta dell'AUROC quando i minuti buoni sono rari: dito somiglianza
-  tra battiti 0,92, SQI 0,34; fronte gradient boosting 0,70, somiglianza tra battiti 0,67, SQI 0,05.
-- **Conseguenza**: alla fronte la quasi perfezione del gradient boosting sulla curva dell'errore era in
-  gran parte circolare. Col criterio "segue la verità" i segnali di coerenza dei battiti sono i migliori.
-  Anche così, i valori tenuti restano circa 3 volte quelli veri (mediana PPG 65 ms contro ECG 22 ms).
-  È stato SHAP (stima RMSSD come feature principale alla fronte) a suggerire questo controllo.
+Tracking is Spearman correlation of retained PPG and ECG RMSSD, with subject-bootstrap CIs,
+at 50% finger and 25% forehead coverage. Low error alone is insufficient; tracking is an additional
+sanity check, not proof of unbiased measurement (correlation can coexist with large bias and be affected
+by range restriction). The forehead low-estimate rule tracks weakly (~0.20) compared with template
+consistency (~0.50). Even the latter retains median PPG RMSSD about 65 ms versus ECG about 22 ms.
+The paired bootstrap difference in tracking between template and low-estimate gates is positive on
+forehead data; its finger CI includes zero. See JSON for all paired differences and precision–recall results.
 
-**Riproducibilità.** `quality_models.py`, `conformal.py`, `explain.py` e `robustness_quality.py` rieseguiti due volte: output
-identici. `build_features.py` non contiene elementi casuali; non l'ho rieseguito due volte perché dura
-circa 15 minuti.
+## 11. Does measurement error reach the application's stress index?
 
-## 11. L'errore sull'HRV arriva all'indice di stress? (la continuazione del caso d'uso del corso)
+The app converts HR and RMSSD deviations from a personal baseline into a 0–100 score, then calm /
+aroused / stressed levels. This replay isolates measurement effects on that algorithm; it does not
+validate psychological stress or treat ECG as a stress ground truth.
 
-Lo scopo dell'app era un indice di stress da HR e HRV rispetto a una baseline personale. Qui si misura
-quanto l'errore sull'HRV si trasmette a quell'indice.
+- **Verified port:** `stress.py` preserves `StressDetector` and 1 Hz loop ordering (`update` only
+  when previous displayed SQI ≥0.4, then `compute`). Three synthetic sequences match Dart
+  score and level second by second.
+- **Four streams in `build_stress.py`:** ECG-based application output; v1 with in-loop SQI gate;
+  systolic v2; and v2 with SQI-gated stress updates. ECG HR is the median of up to 10 clean
+  intervals within the last 60 RR; RMSSD uses adjacent valid pairs among the last 60 RR.
+  ECG cleaning uses a centred 11-interval median, so this reference is offline, not causal.
+- **Sessions:** start at t=10 s, one per finger recording, 30-minute sessions on forehead.
+  Baseline starts at session start. The algorithm collects 60 accepted update ticks; with SQI
+  gating this can take longer than 60 wall-clock seconds. The first 60 s window is excluded from
+  evaluation; levels remain unknown until baseline acquisition succeeds.
+- **Dependence:** feature windows do not overlap, but 1 Hz stress outputs reuse rolling interval
+  buffers, accepted-value means, EMA/hysteresis and a shared session baseline. Stored stress rows
+  sample the output at minute ends; they are not independent biological observations. A display
+  gate uses completed-window quality retrospectively. Quality metrics include accepted intervals
+  carried from before a window and SQI based on a rolling buffer.
+- **Evaluation:** non-baseline rows passing the ECG reference screen with known ECG-based level:
+  **424 finger / 10,208 forehead minutes**. Each model uses its own measured baseline. This is
+  a matched algorithm comparison, not a common error-free baseline supplied to PPG.
+- **Display gates:** choose other-subject feature quantiles for 50%/25% targets. Require both the
+  current window and session baseline window to pass. This can reject a whole session. The target
+  is calibrated on finite feature values among evaluable non-baseline minutes, before this additional
+  baseline restriction; realized display coverage is shown below.
 
-- **Porting verificato.** `stress.py` riproduce `stress_detector.dart` e l'ordine del ciclo a 1 Hz
-  (`update` solo se SQI ≥ 0,4, poi `compute`). Su tre sequenze sintetiche punteggio e livello
-  coincidono secondo per secondo con il Dart originale (`tests/test_stress.py`).
-- **Replay** (`build_stress.py`). Per ogni secondo si confrontano quattro versioni:
-  - **ECG**: HR (mediana degli ultimi 10 RR) e RMSSD (ultimi 60 RR consecutivi puliti) dall'ECG. È
-    quello che l'app mostrerebbe con battiti perfetti: il riferimento. Non è una misura indipendente
-    di stress;
-  - **app com'è** (v1, filtro SQI nel ciclo);
-  - **v2**;
-  - **v2 con il filtro SQI dell'app**.
-
-  La baseline di 60 s parte a inizio sessione: una sessione per registrazione sul dito, sessioni da
-  30 minuti sulla fronte. Si valutano i minuti dopo la baseline con riferimento ECG affidabile: 424 sul
-  dito, 10.208 sulla fronte.
-- **Valutazione** (`stress_eval.py` → `results/stress_eval.json`, `results/stress_eval_stdout.txt`).
-  - *Metriche*: accordo e kappa di Cohen tra livelli; falsi allarmi = minuti calmi da ECG in cui l'app
-    mostra "agitato" o "stressato"; persi = il contrario.
-  - *Filtri di visualizzazione*: soglia scelta sulle altre persone (leave-one-subject-out) per mostrare
-    il 50% o il 25% dei minuti; se il minuto di baseline non passa la soglia, la sessione non viene
-    mostrata.
-
-| | Minuti mostrati | Kappa (IC 95%) | Falsi allarmi | Persi |
+<!-- BEGIN STRESS_FULL_TABLE -->
+| Stress output vs ECG-based app output | Minutes shown | Cohen’s κ (95% CI) | False alarms | Misses |
 |---|---|---|---|---|
-| Dito — app com'è | 100% | 0,28 (0,21–0,36) | 31% | 26% |
-| Dito — v2 | 100% | 0,40 (0,29–0,52) | 25% | 22% |
-| Dito — v2 + coerenza battiti, 50% | 46% | 0,68 (0,52–0,79) | 13% | 8% |
-| Dito — v2 + coerenza battiti, 25% | 19% | 0,79 (0,55–1,00) | 13% | 0% |
-| Dito — v2 + "stime più basse", 25% | 21% | 0,61 (0,34–0,89) | 9% | 23% |
-| Fronte — app com'è | 91% | 0,15 (0,12–0,19) | 43% | 35% |
-| Fronte — v2 | 100% | 0,13 (0,08–0,19) | 51% | 31% |
-| Fronte — v2 + coerenza battiti, 25% | 16% | 0,33 (0,16–0,42) | 36% | 17% |
+| Finger — original app | 100% | 0.28 (0.21–0.36) | 31% | 26% |
+| Finger — systolic v2 | 100% | 0.40 (0.29–0.52) | 25% | 22% |
+| Finger — v2 + consistency, 50% target | 46% | 0.68 (0.52–0.79) | 13% | 8% |
+| Finger — v2 + consistency, 25% target | 19% | 0.79 (0.55–1.00) | 13% | 0% |
+| Finger — v2 + low estimate, 25% target | 21% | 0.61 (0.34–0.89) | 9% | 23% |
+| Forehead — original app | 91% | 0.15 (0.12–0.19) | 43% | 35% |
+| Forehead — systolic v2 | 100% | 0.13 (0.08–0.19) | 51% | 31% |
+| Forehead — v2 + consistency, 25% target | 16% | 0.33 (0.16–0.42) | 36% | 17% |
+<!-- END STRESS_FULL_TABLE -->
 
-- Sul dito la coerenza dei battiti non migliora l'accordo tenendo solo i minuti facili: tra quelli
-  tenuti al 50% i calmi sono il 70%, contro il 72% del totale. Il filtro "stime più basse" al 25% invece
-  scarta proprio gli episodi di stress (1 minuto "stressato" su 89 tenuti) e ne perde il 23%. Sulla
-  kappa i due filtri non sono distinguibili (IC sovrapposti).
-- **Incertezza** (conformal sul punteggio, 90%, persona di test mai usata). Copertura 90,4% sul dito e
-  90,0% sulla fronte; larghezza mediana 49 punti sul dito e 100 (tutta la scala) sulla fronte. Il
-  livello è "sicuro" (intervallo dentro una fascia) nel 34% e nel 24% dei minuti, ma è quasi sempre
-  "calmo" (98% e 99,6%). Alla fronte l'accordo dei livelli sicuri (83%) è uguale a quello di chi
-  risponde sempre "calmo" (82,8%), con kappa 0,03 e il 98% degli episodi persi. Gli intervalli sono
-  onesti ma non permettono di confermare lo stress.
+Coverage = known displayed levels / all evaluable minutes. False alarms = non-calm output among
+**displayed** minutes whose ECG-based app level is calm. Misses = calm output among displayed
+minutes whose ECG-based level is non-calm; abstentions are not counted as misses. Thus a lower
+false-alarm percentage is conditional on a selected set, not a reduction demonstrated on identical minutes.
 
-## 12. Riprodurre
+At the finger 50% target, calm-reference share is about 70% retained versus 72% overall. This argues
+against a simple majority-class explanation but **does not exclude selection of easier minutes**.
+The low-estimate 25% gate retains only one stressed-reference minute among 89 displayed minutes.
+Overlapping CIs alone cannot establish equality or the absence of a paired difference between gates.
+
+**Stress uncertainty:** train and calibrate on other subjects, repeating 10 splits per held-out subject.
+Intervals target ECG-based **scores**. “Confident” means the interval is wholly inside a fixed
+score band (<35, 35≤score<65, ≥65). These bands differ from the app's stateful hysteretic levels
+(35/25 and 65/55 entry/exit thresholds), so confident-band kappa is not directly comparable with
+level kappa in the table. Pooling repeats does not create more independent test participants.
+
+<!-- BEGIN STRESS_CONFORMAL -->
+Empirical score-interval coverage: finger 90.4%, forehead 90.0%; median width 49 and 100 points. Confident-band outputs occur in 34% and 24% of evaluated window/split pairs; 98.5% and 99.6% of those outputs are calm. Forehead confident-band agreement is 83.0%, versus 82.7% for always calm on the same subset; κ = 0.04, with 98% of non-calm reference bands missed.
+<!-- END STRESS_CONFORMAL -->
+
+The overwhelmingly calm outputs and near-majority-baseline forehead agreement make high raw
+agreement misleading. Quality estimation identifies relatively safer windows but cannot compensate
+for a fundamentally unreliable beat series.
+
+## 12. Reproduction
+
+Recommended Python: **3.14**; this review used CPython **3.14.3 on macOS arm64**. Direct pins
+in `requirements.txt` were installed and checked locally; transitive packages are not fully locked.
+Seed: 20260928 for simulations, subject splits, bootstraps and GBM. Logistic fitting uses its
+non-stochastic default solver. Numerical libraries and platforms may still alter floating-point results.
+
+Lightweight checks, from repository root:
+
+```bash
+python3 -m venv analysis/.venv
+analysis/.venv/bin/python -m pip install -r analysis/requirements.txt
+analysis/.venv/bin/python -m pip check
+analysis/.venv/bin/python -m pytest analysis/tests/
+analysis/.venv/bin/python analysis/check_doc_numbers.py
+analysis/.venv/bin/python brief/build_pdf.py
+```
+
+The PDF script requires Chrome/Chromium; `CHROME_BIN` can specify its executable. Dart is not
+needed to use committed equivalence fixtures. Regeneration needs both Dart and the separate
+original app sources. CI installs the same pins and runs unit tests only: no datasets or full reproduction.
+
+Full reproduction, only when prepared for the download and runtime:
 
 ```bash
 cd analysis
-./reproduce.sh      # crea .venv se manca, scarica ~410 MB, test, analisi, figura, controllo Terra
+./reproduce.sh
 ```
 
-Richiede Python 3 (usato 3.14.3), le versioni in `requirements.txt` e, per i test di equivalenza,
-Dart (usato quello di Flutter). Seed: 20260928. Tempo: circa 1 minuto più il download.
-`data/ptt_ppg/` (411 MB) si può cancellare e riscaricare.
+This downloads ~410 MB PTT-PPG (official SHA-256 manifest checked) and ~19.6 GB WildPPG transfer,
+one raw participant at a time, keeping extracted NPZs. Budget several GB of free disk for the venv,
+accumulating extracted data and the largest temporary MAT file; there is no verified universal
+2.5 GB total-disk bound. The historical runtime estimate is about 3 hours, network/machine dependent.
+WildPPG downloads lack an upstream checksum verification step. Do not infer identical source bytes
+from a successful extraction alone. The initial `run_wildppg.py an0 e61` output stays explicitly scoped
+to two people; feature/stress extraction uses all downloaded participants.
 
-SHA-256 dei risultati sul dito prima dell'aggiunta della v2 (identici su due esecuzioni complete; le versioni attuali sono in fondo):
+`quality_models.py`, `conformal.py`, `explain.py`, `robustness_quality.py`, `stress_eval.py` and
+figure scripts run from saved CSVs without raw data. Following the count-feature correction these
+were regenerated from cached counts. Raw-data-dependent timing, reference and stress-replay tables
+were not changed by that correction. The review report records executed commands, limitations and
+current hashes in `results/review_checksums.txt`. Old hashes below document earlier snapshots only.
+
+### Historical hash records (not current-output assertions)
+
+Finger before v2, reported identical on two runs:
 
 ```
 f9585a79e486cd682141654a385de11b8aea14648cd63fd108cd33fa6c23719c  results/summary.json
@@ -480,7 +551,7 @@ f9585a79e486cd682141654a385de11b8aea14648cd63fd108cd33fa6c23719c  results/summar
 b02f17d2a137315de1a867f1d5551aa9d0e085c917525ad9b2f3bd9cb60a72b1  results/fiducial_check.json
 ```
 
-SHA-256 dei risultati alla fronte (identici su due esecuzioni di `run_wildppg.py`):
+Forehead before v2, reported identical on two runs:
 
 ```
 c4587a81cc8eb61f0e466e8098253ed7f34eac42af6c6ac6e91f0eee8deccdda  results/wildppg_summary.json
@@ -488,8 +559,7 @@ c4587a81cc8eb61f0e466e8098253ed7f34eac42af6c6ac6e91f0eee8deccdda  results/wildpp
 f69e947435323ce9f2a771dac8357c567f452a66a79ea5fac09d681208773bc2  results/wildppg_windows.csv
 ```
 
-Versioni attuali, dopo l'aggiunta della v2 e delle prove 1–2 (i valori della v1 sono invariati,
-verificato chiave per chiave; identici su due esecuzioni):
+After v2 and experiments 1–2 (v1 values checked key by key at that stage):
 
 ```
 3e08eeb89edcef759ed3f4787a7f9dd280a2fe75bd2e8acd2da08e3264fcac69  results/summary.json
@@ -500,7 +570,8 @@ c7c36aabfd3b416dd4f65ad3fb3b4aefb6dc12fd26cba42f3caf487c99cee6a9  results/wildpp
 bfb3d2b6af0198315bffa69950bdaa828f4ff7f7f29e63cf6491d7c3a1ac77a3  results/sqi_calibration.json
 ```
 
-Sezione 10 (identici su due esecuzioni; le tabelle delle feature sono le versioni usate):
+Original §10 outputs, reported identical on two runs before the count-feature correction;
+feature extraction was not repeated at that stage (about 15 minutes):
 
 ```
 b5ff68ae0feeab04f437d44e72823184f9a79b7b00b42c98871197c4154f956e  results/quality_models.json
@@ -509,7 +580,7 @@ b5ff68ae0feeab04f437d44e72823184f9a79b7b00b42c98871197c4154f956e  results/qualit
 3ab751d8133b598d209db93651c5b3034d05f0c389c024ab67f805de3e1363a5  results/explain.json
 ```
 
-Sezione 11 (stress; `stress_eval.json` identico su due esecuzioni, le altre tabelle sono deterministiche):
+Original stress outputs (evaluation reported identical on two runs; replay deterministic):
 
 ```
 4aac5823108b2a18f0d70d2c3f7217753595a4e2a3570e636d0b175df937336e  results/stress_finger.csv

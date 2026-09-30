@@ -28,6 +28,7 @@ import numpy as np
 import pandas as pd
 from sklearn.metrics import cohen_kappa_score
 
+from conformal import conformal_q
 from features import FEATURES
 from quality_models import gbm
 from run_analysis import SEED
@@ -143,7 +144,7 @@ def conformal(ev, rng):
             sig_c = np.expm1(m.predict(X[ca])) + 1.0
             sig_t = np.expm1(m.predict(X[te])) + 1.0
             sc = np.sort(err[ca] / sig_c)
-            q = sc[min(int(np.ceil((len(sc) + 1) * (1 - ALPHA))), len(sc)) - 1]
+            q = conformal_q(sc, alpha=ALPHA)
             lo = np.clip(d["score_v2"].to_numpy()[te] - q * sig_t, 0, 100)
             hi = np.clip(d["score_v2"].to_numpy()[te] + q * sig_t, 0, 100)
             cov.append(err[te] <= q * sig_t)

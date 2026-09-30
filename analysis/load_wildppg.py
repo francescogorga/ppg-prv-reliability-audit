@@ -66,7 +66,10 @@ class Participant:
 
 
 def participants() -> list[str]:
-    return sorted(p.stem for p in DATA.glob("*.npz"))
+    ids = sorted(p.stem for p in DATA.glob("*.npz"))
+    if not ids:
+        raise FileNotFoundError(f"No extracted WildPPG data in {DATA}; run download_wildppg.sh all")
+    return ids
 
 
 def load(pid: str) -> Participant:

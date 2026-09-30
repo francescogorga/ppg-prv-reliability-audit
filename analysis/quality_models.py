@@ -6,7 +6,7 @@ fitted on the other subjects, and for single features the direction (higher = be
 or worse) is also chosen on the other subjects.
 
 Methods:
-  single features   app SQI, accelerometer SD, template correlation, beat-rejection share, ...
+  single features   app SQI, accelerometer SD, template correlation, rejection count proxy, ...
   logistic          L2 logistic regression predicting "good" (|RMSSD error| <= 5 ms)
   gbm               gradient-boosted trees predicting log(1 + |error|)
   gbm_no_rmssd      same without the RMSSD estimate itself as a feature (selection-bias check)

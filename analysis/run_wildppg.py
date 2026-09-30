@@ -10,8 +10,11 @@ toolbox, which expects volume polarity (see results/wildppg_polarity.json). So:
 Robustness: green channel (light polarity), and the app run resampled to 100 Hz.
 
 Reference: R peaks detected on the sternum Lead-I ECG (ecg_rpeaks.py, validated in
-validate_rpeaks.py), RMSSD with a standard RR cleaning rule; windows whose ECG has
+validate_rpeaks.py on PTT-PPG, not on annotated WildPPG ECG), RMSSD with a standard RR cleaning rule; windows whose ECG has
 more than 10% rejected RR are excluded as unreliable reference.
+
+The default is the original two-participant analysis (an0, e61), even when all
+16 extracted recordings are available. Pass participant IDs to change that scope.
 
 Run from analysis/: .venv/bin/python run_wildppg.py  -> results/wildppg_*.{csv,json}
 """
@@ -19,6 +22,7 @@ from __future__ import annotations
 
 import json
 import math
+import sys
 import time
 from multiprocessing import Pool
 from pathlib import Path
@@ -69,10 +73,13 @@ def _run(args):
     return pid, run, res, f, time.time() - t
 
 
-def main():
+def main(pids=("an0", "e61")):
     t_start = time.time()
     OUT.mkdir(exist_ok=True)
-    pids = participants()
+    available = participants()
+    missing = set(pids) - set(available)
+    if missing:
+        raise FileNotFoundError(f"Missing WildPPG participants {sorted(missing)}; run download_wildppg.sh first")
     runs = ["app", "systolic", "green", "inloop_0.4", "app_100hz", "v2", "v2_inloop_0.4"]
     with Pool() as pool:
         out = pool.map(_run, [(pid, r) for pid in pids for r in runs])
@@ -240,4 +247,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    main(tuple(sys.argv[1:]) or ("an0", "e61"))

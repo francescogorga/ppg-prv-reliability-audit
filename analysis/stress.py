@@ -3,7 +3,7 @@ loop of home_page.dart:212-247. Verified against the original Dart class in
 tests/test_stress.py (dart_ref/stress_ref.dart).
 
 Score 0-100 from HR and RMSSD only: z-scores against a 60 s personal baseline,
-12 s rolling means, EMA (alpha 0.35), levels with hysteresis (35/25, 65/55).
+12 accepted-value rolling means, EMA (alpha 0.35), levels with hysteresis (35/25, 65/55).
 """
 from __future__ import annotations
 
